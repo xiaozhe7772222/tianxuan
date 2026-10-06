@@ -144,7 +144,7 @@ fun AboutCommunityScreen(
             releaseNotes = currentReleaseNotes,
             isLoading = isLoadingReleaseNotes,
             onDismiss = { showReleaseNotesDialog = false },
-            onOpenHistory = { openBrowser(context, "https://github.com/wkbin/tianxuan/releases") },
+            onOpenHistory = { openBrowser(context, "$REPO_URL/releases") },
         )
     }
 
@@ -223,8 +223,8 @@ fun AboutCommunityScreen(
                     SettingsRow(
                         icon = RuntimeIconName.Github,
                         title = "GitHub 开源项目",
-                        subtitle = "https://github.com/wkbin/tianxuan · 欢迎 Star 支持",
-                        onClick = { openBrowser(context, "https://github.com/wkbin/tianxuan") },
+                        subtitle = "$REPO_URL · 欢迎 Star 支持",
+                        onClick = { openBrowser(context, REPO_URL) },
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     SettingsRow(

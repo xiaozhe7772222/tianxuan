@@ -12,10 +12,19 @@ import java.io.File
  * 3. 部署 GitHub Actions CI 工作流模板；
  * 4. 生成引导 Agent 执行自迭代开发的规范提示词。
  */
+/**
+ * 官方仓库地址。
+ *
+ * 与 `core/network` 的 AppUpdateManager 及 `assets/update_source.properties`
+ * 保持同一坐标；本模块刻意不依赖 core/network，以免破坏架构依赖白名单，
+ * 故改仓库时三处需同步。
+ */
+const val TIANXUAN_OFFICIAL_REPO: String = "https://github.com/xiaozhe7772222/tianxuan"
+
 object CustomIterationBootstrap {
 
     const val WORKSPACE_NAME = "custom_tianxuan"
-    const val OFFICIAL_REPO = "https://github.com/wkbin/tianxuan"
+    const val OFFICIAL_REPO: String = TIANXUAN_OFFICIAL_REPO
 
     const val BOOTSTRAP_PROMPT = """我准备在天玄（TianXuan）的手机 Linux 虚拟沙盒中进行 TianXuan 自定义迭代。
 

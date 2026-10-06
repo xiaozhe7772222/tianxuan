@@ -25,12 +25,36 @@ class AppUpdateManager(
     private val context: Context,
     private val httpClient: OkHttpClient,
 ) {
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+
+    /**
+     * 更新源。仓库坐标从 `assets/update_source.properties` 读取（键 `update.repo`），
+     * 缺失时回落到 [DEFAULT_REPO]。这样换发布仓库只需改一个资源文件，
+     * 不必改动本文件，也不必依赖 BuildConfig 开关。
+     */
+    private val repo: String = runCatching {
+    context.assets.open("update_source.properties")
+      .bufferedReader()
+      .use { it.readText() }
+    .lineSequence()
+      .map { it.trim() }
+      .firstOrNull { it.startsWith("update.repo") }
+      ?.substringAfter('=', "")
+      ?.trim()
+      ?.takeIf { it.contains('/') }
+    }.getOrNull() ?: DEFAULT_REPO
+
+    private val releasesApi: String = "https://api.github.com/repos/$repo/releases/latest"
+
+    private val repoUrl: String get() = "https://github.com/$repo"
+
     companion object {
-        const val GITHUB_REPO = "wkbin/tianxuan"
-        const val GITHUB_REPO_URL = "https://github.com/wkbin/tianxuan"
+    /** 未配置时的兜底仓库 */
+    const val DEFAULT_REPO = "xiaozhe7772222/tianxuan"
         const val QQ_GROUP_ID = "964382207"
-        private const val RELEASES_API = "https://api.github.com/repos/wkbin/tianxuan/releases/latest"
+
+        /** 仓库主页，供「关于」页与更新失败时的回退链接使用 */
+        val DEFAULT_REPO_URL: String get() = "https://github.com/$DEFAULT_REPO"
     }
 
     /**
@@ -39,7 +63,7 @@ class AppUpdateManager(
     suspend fun checkUpdate(currentVersionName: String): Result<AppUpdateInfo> = withContext(Dispatchers.IO) {
         runCatching {
             val request = Request.Builder()
-                .url(RELEASES_API)
+                .url(releasesApi)
                 .header("Accept", "application/vnd.github.v3+json")
                 .header("User-Agent", "TianXuan-App/${currentVersionName}")
                 .get()
@@ -56,7 +80,7 @@ class AppUpdateManager(
                 val latestVersion = tagName.removePrefix("v").trim()
                 val title = jsonElement["name"]?.jsonPrimitive?.content ?: tagName
                 val bodyText = jsonElement["body"]?.jsonPrimitive?.content.orEmpty()
-                val htmlUrl = jsonElement["html_url"]?.jsonPrimitive?.content ?: GITHUB_REPO_URL
+                val htmlUrl = jsonElement["html_url"]?.jsonPrimitive?.content ?: repoUrl
                 val publishedAt = jsonElement["published_at"]?.jsonPrimitive?.content.orEmpty()
 
                 // 查找 assets 中的 apk 文件
@@ -109,7 +133,7 @@ class AppUpdateManager(
             val clean = versionName.substringBefore('-').trim()
             val tag = if (clean.startsWith("v")) clean else "v$clean"
             val request = Request.Builder()
-                .url("https://api.github.com/repos/$GITHUB_REPO/releases/tags/$tag")
+                .url("https://api.github.com/repos/$repo/releases/tags/$tag")
                 .header("Accept", "application/vnd.github.v3+json")
                 .header("User-Agent", "TianXuan-App/$versionName")
                 .get()
