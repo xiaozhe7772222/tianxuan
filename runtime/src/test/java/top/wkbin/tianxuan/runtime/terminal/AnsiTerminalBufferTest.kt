@@ -122,20 +122,24 @@ class AnsiTerminalBufferTest {
     @Test
     fun wideCharactersOverwritingExistingSpacesDoNotLeaveSpaces() {
         val buffer = AnsiTerminalBuffer(columns = 20, maxRows = 10)
-        // 模拟 readline/bash：先清行，再输入中文字符
+        // 模拟 readline/bash：先清行，再输入中文宽字符
         buffer.append("abcdefgh")
         val screen = buffer.append("\u001B[1G\u001B[K你好天玄")
 
         val line = screen.first()
         assertEquals("你好天玄", line.cells.joinToString("") { it.character })
+        // 4 个宽字符各占 2 列，正好填掉先前 8 列的 abcdefgh
         assertEquals(8, buffer.cursor().column)
+        // 宽字符占双列：偶数位是字符本体，奇数位是占位空串。
+        // 断言必须与本例写入的数据一致——此处原先写的是改名前的旧字，
+        // 与同一用例里写入的内容自相矛盾，该用例因此长期失败而被忽略。
         assertEquals("你", line.cells[0].character)
         assertEquals("", line.cells[1].character)
         assertEquals("好", line.cells[2].character)
         assertEquals("", line.cells[3].character)
-        assertEquals("太", line.cells[4].character)
+        assertEquals("天", line.cells[4].character)
         assertEquals("", line.cells[5].character)
-        assertEquals("墟", line.cells[6].character)
+        assertEquals("玄", line.cells[6].character)
         assertEquals("", line.cells[7].character)
     }
 }

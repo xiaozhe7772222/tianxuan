@@ -49,7 +49,7 @@ data class CcSwitchUiState(
     val tianXuanModels: List<AiModelEntity> = emptyList(),
     val deviceLanIp: String? = null,
     val webUsername: String = "admin",
-    val webPassword: String = "admin123",
+    val webPassword: String = "",
     val errorMessage: String? = null,
     val successMessage: String? = null,
     val switchingAgent: CcAgentState? = null,
@@ -98,7 +98,7 @@ class CcSwitchViewModel(
     private val _providers = MutableStateFlow<List<CcProviderProfile>>(emptyList())
     private val _deviceLanIp = MutableStateFlow<String?>(null)
     private val _webUsername = MutableStateFlow("admin")
-    private val _webPassword = MutableStateFlow("admin123")
+    private val _webPassword = MutableStateFlow("")
     private val _errorMessage = MutableStateFlow<String?>(null)
     private val _successMessage = MutableStateFlow<String?>(null)
     private val _switchingAgent = MutableStateFlow<CcAgentState?>(null)
@@ -280,54 +280,30 @@ class CcSwitchViewModel(
         }
     }
 
-    suspend fun readWebCredentials(): Pair<String, String> {
-        return withContext(Dispatchers.IO) {
-            try {
-                val cmd = """
-                    USER_FILE="${'$'}{HOME:-/root}/.cc-switch/web_username"
-                    PASS_FILE="${'$'}{HOME:-/root}/.cc-switch/web_password"
-                    if [ ! -s "${'$'}USER_FILE" ]; then
-                        mkdir -p "${'$'}{HOME:-/root}/.cc-switch" 2>/dev/null || true
-                        printf 'admin' > "${'$'}USER_FILE" 2>/dev/null || true
-                    fi
-                    if [ ! -s "${'$'}PASS_FILE" ]; then
-                        mkdir -p "${'$'}{HOME:-/root}/.cc-switch" 2>/dev/null || true
-                        printf 'admin123' > "${'$'}PASS_FILE" 2>/dev/null || true
-                    fi
-                    chmod 600 "${'$'}USER_FILE" "${'$'}PASS_FILE" 2>/dev/null || true
-                    cat "${'$'}USER_FILE" 2>/dev/null || echo "admin"
-                    echo "---TIANXUAN_SPLIT---"
-                    cat "${'$'}PASS_FILE" 2>/dev/null || echo "admin123"
-                """.trimIndent()
-                val res = linuxRuntime.execute(ShellCommand(commandLine = cmd, timeoutMs = 5000L))
-                if (res.isSuccess) {
-                    val parts = res.stdout.split("---TIANXUAN_SPLIT---")
-                    val username = parts.getOrNull(0)?.trim().orEmpty().ifBlank { "admin" }
-                    val password = parts.getOrNull(1)?.trim().orEmpty().ifBlank { "admin123" }
-                    Pair(username, password)
-                } else {
-                    Pair("admin", "admin123")
-                }
-            } catch (_: Exception) {
-                Pair("admin", "admin123")
+    /**
+     * 读取中枢 Web 控制台凭据。实现见 [CcSwitchCredentials.read]：
+     * 历史行为是写死 `admin123` 默认口令，等于把局域网可访问的控制台密钥
+     * 交给所有同网设备，现改为随机生成。
+     */
+    suspend fun readWebCredentials(): Pair<String, String> =
+        CcSwitchCredentials.read(linuxRuntime)
+
+    /** 重置 Web 口令。空口令直接忽略——传空下去会把用户锁在门外。 */
+    fun resetWebPassword(newPassword: String) {
+        if (newPassword.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val ok = CcSwitchCredentials.write(linuxRuntime, newPassword)
+            if (ok) _webPassword.value = newPassword
+            withContext(Dispatchers.Main.immediate) {
+                _successMessage.value =
+                    if (ok) "Web 访问密码已重置（重启中枢生效）" else "Web 访问密码重置失败，请重试"
             }
         }
     }
 
-    fun resetWebPassword(newPassword: String = "admin123") {
-        viewModelScope.launch(Dispatchers.IO) {
-            val cmd = """
-                PASS_FILE="${'$'}{HOME:-/root}/.cc-switch/web_password"
-                mkdir -p "${'$'}{HOME:-/root}/.cc-switch" 2>/dev/null || true
-                printf '%s' "$newPassword" > "${'$'}PASS_FILE" 2>/dev/null || true
-                chmod 600 "${'$'}PASS_FILE" 2>/dev/null || true
-            """.trimIndent()
-            linuxRuntime.execute(ShellCommand(commandLine = cmd, timeoutMs = 5000L))
-            _webPassword.value = newPassword
-            withContext(Dispatchers.Main.immediate) {
-                _successMessage.value = "Web 访问密码已重置为：$newPassword（重启中枢生效）"
-            }
-        }
+    /** 生成一个强随机口令并落盘，供界面「生成强口令」使用。 */
+    fun rotateWebPassword() {
+        resetWebPassword(CcSwitchCredentials.generatePassword())
     }
 
     private suspend fun inspectSandboxAgents(): Map<String, String?> {

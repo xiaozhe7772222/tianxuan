@@ -5,6 +5,14 @@ import androidx.room.RoomDatabase
 import top.wkbin.tianxuan.core.database.task.AgentTaskEntity
 import top.wkbin.tianxuan.core.database.task.AgentTaskDao
 
+/**
+ * 当前 schema 版本。迁移链的终点，升版本时必须同步补迁移（见 MigrationRegistry）。
+ *
+ * 提成常量而不是散落的字面量：过去 `@Database(version = 53)` 与迁移链终点各写一处，
+ * 改版本时漏改任一处，Room 只会在用户设备上抛 IllegalStateException 才暴露。
+ */
+const val SCHEMA_VERSION: Int = 53
+
 @Database(
     entities = [
         ToolEntity::class,
@@ -44,7 +52,7 @@ import top.wkbin.tianxuan.core.database.task.AgentTaskDao
         WorkflowExecutionLogEntity::class,
         WorkflowScheduleEntity::class,
     ],
-    version = 53,
+    version = SCHEMA_VERSION,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {

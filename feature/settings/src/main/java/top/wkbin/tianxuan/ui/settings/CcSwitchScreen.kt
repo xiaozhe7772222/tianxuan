@@ -1,12 +1,9 @@
 package top.wkbin.tianxuan.ui.settings
 
 import org.koin.compose.viewmodel.koinViewModel
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -156,7 +153,7 @@ fun CcSwitchScreen(
                 onStart = { viewModel.startDaemon() },
                 onStop = { viewModel.stopDaemon() },
                 onRestart = { viewModel.restartDaemon() },
-                onResetPassword = { viewModel.resetWebPassword(it) },
+                onRotatePassword = { viewModel.rotateWebPassword() },
                 onOpenWebConsole = {
                     val targetUrl = state.loopbackUrl.ifBlank { state.preferredWebUrl }
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)).apply {
@@ -287,7 +284,7 @@ fun CcSwitchScreen(
             onDismiss = { viewModel.dismissInstallLogs() },
             onClear = { viewModel.clearInstallLogs() },
             onCopy = { logsText ->
-                copyText(context, logsText, "已复制完整安装日志 (${state.installLogs.size} 行)")
+                copyToClipboard(context, logsText, "安装日志", "已复制完整安装日志 (${state.installLogs.size} 行)")
             },
         )
     }
@@ -299,7 +296,7 @@ private fun DaemonServiceCard(
     onStart: () -> Unit,
     onStop: () -> Unit,
     onRestart: () -> Unit,
-    onResetPassword: (String) -> Unit,
+    onRotatePassword: () -> Unit,
     onOpenWebConsole: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -365,53 +362,11 @@ private fun DaemonServiceCard(
             Spacer(modifier = Modifier.height(10.dp))
 
             // Web 控制台凭据区域（完全扁平化，去除卡片套卡片）
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Web 控制台访问凭据 (HTTP Basic 认证)",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    RuntimeTextButton(
-                        onClick = {
-                            val creds = "${state.webUsername} / ${state.webPassword}"
-                            copyText(context, creds, "已复制控制台账号密码: $creds")
-                        },
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                    ) {
-                        Text("一键复制", style = MaterialTheme.typography.labelSmall)
-                    }
-                    RuntimeTextButton(
-                        onClick = { onResetPassword("admin123") },
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                    ) {
-                        Text("重置密码", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "账号：${state.webUsername}",
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = "密码：${state.webPassword}",
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
+            WebCredentialSection(
+                username = state.webUsername,
+                password = state.webPassword,
+                onRotatePassword = onRotatePassword,
+            )
 
             Text(
                 text = "💡 外部浏览器访问提示登录时输入上方账号密码即可",
@@ -459,7 +414,7 @@ private fun DaemonServiceCard(
                 RuntimeButton(
                     onClick = {
                         val creds = "${state.webUsername} / ${state.webPassword}"
-                        copyText(context, creds, "已复制登录凭据: $creds")
+                        copyToClipboard(context, creds, "CC-Switch 凭据", "已复制登录凭据: $creds")
                         onOpenWebConsole()
                     },
                     modifier = Modifier.weight(1f),
@@ -1007,11 +962,7 @@ private fun UpgradeVersionDialog(
     )
 }
 
-private fun copyText(context: Context, text: String, toast: String) {
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    clipboard.setPrimaryClip(ClipData.newPlainText("TianXuan", text))
-    Toast.makeText(context, toast, Toast.LENGTH_SHORT).show()
-}
+
 
 @Composable
 private fun InstallLogDialog(

@@ -1,10 +1,7 @@
 package top.wkbin.tianxuan.ui.settings
 
 import org.koin.compose.viewmodel.koinViewModel
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -197,23 +194,23 @@ fun FtpSettingsScreen(
                             label = "服务端口 (Port)",
                             value = settings.port.toString(),
                             highlight = true,
-                            onCopy = { copyText(context, settings.port.toString(), "FTP 端口 (${settings.port}) 已复制") },
+                            onCopy = { copyToClipboard(context,  settings.port.toString(), "FTP URL",  "FTP 端口 (${settings.port}) 已复制") },
                         )
                         ParamRow(
                             label = "本机主机 IP (Host - 手机其他 App 连接)",
                             value = "127.0.0.1",
                             highlight = true,
-                            onCopy = { copyText(context, "127.0.0.1", "本机 IP (127.0.0.1) 已复制") },
+                            onCopy = { copyToClipboard(context,  "127.0.0.1", "FTP URL",  "本机 IP (127.0.0.1) 已复制") },
                         )
                         ParamRow(
                             label = "局域网主机 IP (Host - 电脑/外部设备连接)",
                             value = settings.connectionHost,
-                            onCopy = { copyText(context, settings.connectionHost, "局域网 IP (${settings.connectionHost}) 已复制") },
+                            onCopy = { copyToClipboard(context,  settings.connectionHost, "FTP URL",  "局域网 IP (${settings.connectionHost}) 已复制") },
                         )
                         ParamRow(
                             label = "登录用户名 (Username)",
                             value = settings.username,
-                            onCopy = { copyText(context, settings.username, "用户名 (${settings.username}) 已复制") },
+                            onCopy = { copyToClipboard(context,  settings.username, "FTP URL",  "用户名 (${settings.username}) 已复制") },
                         )
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
@@ -226,12 +223,12 @@ fun FtpSettingsScreen(
                         ParamRow(
                             label = "局域网 / 电脑访问 URL",
                             value = settings.connectionUrl,
-                            onCopy = { copyText(context, settings.connectionUrl, "局域网 FTP 地址已复制") },
+                            onCopy = { copyToClipboard(context,  settings.connectionUrl, "FTP URL",  "局域网 FTP 地址已复制") },
                         )
                         ParamRow(
                             label = "手机本机其他 App 访问 URL",
                             value = settings.localUrl,
-                            onCopy = { copyText(context, settings.localUrl, "本机 FTP 地址已复制") },
+                            onCopy = { copyToClipboard(context,  settings.localUrl, "FTP URL",  "本机 FTP 地址已复制") },
                         )
 
                         Text(
@@ -340,7 +337,7 @@ fun FtpSettingsScreen(
                             modifier = Modifier.weight(1f),
                         )
                         RuntimeOutlinedButton(
-                            onClick = { copyText(context, settings.port.toString(), "FTP 端口 (${settings.port}) 已复制") },
+                            onClick = { copyToClipboard(context,  settings.port.toString(), "FTP URL",  "FTP 端口 (${settings.port}) 已复制") },
                         ) {
                             RuntimeIcon(RuntimeIconName.Copy, Modifier.size(14.dp))
                             Spacer(Modifier.size(4.dp))
@@ -386,11 +383,6 @@ private fun SectionLabel(text: String) {
     )
 }
 
-private fun copyText(context: Context, text: String, toast: String) {
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-    clipboard?.setPrimaryClip(ClipData.newPlainText("FTP URL", text))
-    Toast.makeText(context, toast, Toast.LENGTH_SHORT).show()
-}
 
 @Composable
 private fun FtpPasswordDialog(

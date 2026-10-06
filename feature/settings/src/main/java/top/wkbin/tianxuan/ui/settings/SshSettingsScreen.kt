@@ -1,10 +1,7 @@
 package top.wkbin.tianxuan.ui.settings
 
 import org.koin.compose.viewmodel.koinViewModel
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -232,7 +229,7 @@ fun SshSettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         RuntimeOutlinedButton(
-                            onClick = { copyText(context, settings.connectionCommand, "SSH 命令已复制") },
+                            onClick = { copyToClipboard(context,  settings.connectionCommand, "SSH command",  "SSH 命令已复制") },
                             modifier = Modifier.align(Alignment.End),
                         ) {
                             RuntimeIcon(RuntimeIconName.Copy, Modifier.size(16.dp))
@@ -350,11 +347,6 @@ private fun SectionLabel(text: String) {
     )
 }
 
-private fun copyText(context: Context, text: String, toast: String) {
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-    clipboard?.setPrimaryClip(ClipData.newPlainText("SSH command", text))
-    Toast.makeText(context, toast, Toast.LENGTH_SHORT).show()
-}
 
 @Composable
 private fun PasswordSettingsDialog(

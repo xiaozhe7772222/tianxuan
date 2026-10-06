@@ -418,36 +418,35 @@ internal class FtpSession(
         }
     }
 
-    private fun handlePort(arg: String) {
-        if (!requireAuth()) return
-        closePassiveServer()
-        val parts = arg.split(",").mapNotNull { it.trim().toIntOrNull() }
-        if (parts.size != 6) {
-            sendResponse(501, "Illegal PORT command.")
-            return
-        }
-        val ip = "${parts[0]}.${parts[1]}.${parts[2]}.${parts[3]}"
-        val port = parts[4] * 256 + parts[5]
-        activeDataAddress = InetSocketAddress(ip, port)
-        sendResponse(200, "PORT command successful.")
-    }
+    private fun handlePort(arg: String) = handleActiveCommand("PORT", ActiveTargetParser::parsePort, arg)
 
-    private fun handleEprt(arg: String) {
+    private fun handleEprt(arg: String) = handleActiveCommand("EPRT", ActiveTargetParser::parseEprt, arg)
+
+    /**
+     * 主动模式命令的共同处理：解析 → 过 bounce 校验 → 落地址并回执。
+     *
+     * PORT 与 EPRT 只差参数语法，校验逻辑完全一致，故合到一处——历史上正是
+     * 这两份拷贝只改了一边，另一边漏了校验，于是留下 bounce 漏洞。
+     */
+    private fun handleActiveCommand(
+        command: String,
+        parse: (String) -> FtpActiveTarget?,
+        arg: String,
+    ) {
         if (!requireAuth()) return
         closePassiveServer()
-        val del = if (arg.isNotEmpty()) arg[0] else '|'
-        val parts = arg.split(del).filter { it.isNotEmpty() }
-        if (parts.size < 3) {
-            sendResponse(501, "Illegal EPRT command.")
+        val target = parse(arg)
+        if (target == null) {
+            sendResponse(501, "Illegal $command command.")
             return
         }
-        val ip = parts[1]
-        val port = parts[2].toIntOrNull() ?: run {
-            sendResponse(501, "Invalid port in EPRT.")
+        if (!FtpBounceGuard.isSamePeer(target.ip, clientIp)) {
+            onLog("[$clientIp] $command 目标地址异常（${target.ip}），已拒绝")
+            sendResponse(501, "Requested action not taken: data connection must target the control connection peer.")
             return
         }
-        activeDataAddress = InetSocketAddress(ip, port)
-        sendResponse(200, "EPRT command successful.")
+        activeDataAddress = InetSocketAddress(target.ip, target.port)
+        sendResponse(200, "$command command successful.")
     }
 
     private fun openDataSocket(): Socket? {
@@ -455,10 +454,10 @@ internal class FtpSession(
         if (pasv != null) {
             return try {
                 val accepted = pasv.accept()
-                // FTP bounce 防护：PASV 端口在 30s 窗口内任何主机都能抢连；
-                // 数据连接必须来自与控制连接相同的来源 IP，否则拒绝。
+                // FTP bounce 防护：PASV 端口在 30s 窗口内任何主机都能抢连，
+                // 故数据连接必须来自与控制连接相同的来源 IP
                 val peer = accepted.inetAddress?.hostAddress
-                if (peer == null || !peer.equals(clientIp, ignoreCase = true)) {
+                if (!FtpBounceGuard.isSamePeer(peer, clientIp)) {
                     onLog("[${clientIp}] 数据连接来源异常（$peer），已拒绝")
                     runCatching { accepted.close() }
                     closePassiveServer()

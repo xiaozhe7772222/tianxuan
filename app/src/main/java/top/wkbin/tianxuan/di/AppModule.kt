@@ -2,31 +2,10 @@ package top.wkbin.tianxuan.di
 
 import android.content.Context
 import androidx.room.Room
+import top.wkbin.tianxuan.core.database.ALL_MIGRATIONS
 import top.wkbin.tianxuan.core.database.AppDatabase
-import top.wkbin.tianxuan.core.database.MIGRATION_27_28
-import top.wkbin.tianxuan.core.database.MIGRATION_28_29
-import top.wkbin.tianxuan.core.database.MIGRATION_30_31
-import top.wkbin.tianxuan.core.database.MIGRATION_31_32
-import top.wkbin.tianxuan.core.database.MIGRATION_33_34
-import top.wkbin.tianxuan.core.database.MIGRATION_34_35
-import top.wkbin.tianxuan.core.database.MIGRATION_35_36
-import top.wkbin.tianxuan.core.database.MIGRATION_36_37
-import top.wkbin.tianxuan.core.database.MIGRATION_37_38
-import top.wkbin.tianxuan.core.database.MIGRATION_38_39
-import top.wkbin.tianxuan.core.database.MIGRATION_39_40
-import top.wkbin.tianxuan.core.database.MIGRATION_40_41
-import top.wkbin.tianxuan.core.database.MIGRATION_41_42
-import top.wkbin.tianxuan.core.database.MIGRATION_42_43
-import top.wkbin.tianxuan.core.database.MIGRATION_43_44
-import top.wkbin.tianxuan.core.database.MIGRATION_44_45
-import top.wkbin.tianxuan.core.database.MIGRATION_45_46
-import top.wkbin.tianxuan.core.database.MIGRATION_46_47
-import top.wkbin.tianxuan.core.database.MIGRATION_47_48
-import top.wkbin.tianxuan.core.database.MIGRATION_48_49
-import top.wkbin.tianxuan.core.database.MIGRATION_49_50
-import top.wkbin.tianxuan.core.database.MIGRATION_50_51
-import top.wkbin.tianxuan.core.database.MIGRATION_51_52
-import top.wkbin.tianxuan.core.database.MIGRATION_52_53
+import top.wkbin.tianxuan.core.database.SCHEMA_VERSION
+import top.wkbin.tianxuan.core.database.assertMigrationChainIsContinuous
 import top.wkbin.tianxuan.core.database.WorkflowDao
 import top.wkbin.tianxuan.core.database.WorkflowScheduleDao
 import top.wkbin.tianxuan.core.database.BuildScriptDao
@@ -85,8 +64,12 @@ object AppModule {
     }
 
     fun provideDatabase(context: Context): AppDatabase {
+        // 迁移链的连续性在这里做自校验，而不是等Room 在用户手机上抛异常。
+        // 断链意味着所有停在该版本的存量用户一升级就崩，且崩溃在启动流程里，
+        // 没有兜底也没有降级路径——这是本项目唯一一类必现的启动级故障。
+        assertMigrationChainIsContinuous(SCHEMA_VERSION)
         return Room.databaseBuilder(context, AppDatabase::class.java, "tianxuan.db")
-            .addMigrations(MIGRATION_27_28, MIGRATION_28_29, MIGRATION_30_31, MIGRATION_31_32, MIGRATION_33_34, MIGRATION_34_35, MIGRATION_35_36, MIGRATION_36_37, MIGRATION_37_38, MIGRATION_38_39, MIGRATION_39_40, MIGRATION_40_41, MIGRATION_41_42, MIGRATION_42_43, MIGRATION_43_44, MIGRATION_44_45, MIGRATION_45_46, MIGRATION_46_47, MIGRATION_47_48, MIGRATION_48_49, MIGRATION_49_50, MIGRATION_50_51, MIGRATION_51_52, MIGRATION_52_53)
+            .addMigrations(*ALL_MIGRATIONS.toTypedArray())
             .build()
     }
 

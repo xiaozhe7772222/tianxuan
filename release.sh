@@ -40,11 +40,15 @@ gh auth status >/dev/null 2>&1 || { echo "gh 未登录" >&2; exit 1; }
 step "静态校验：架构棘轮 + 星象不变量 + 社区坐标一致性"
 # core:model 是纯 Kotlin 模块（任务名 test 而非 testDebugUnitTest），
 # 其中的 CommunityTest 锁住群号唯一真源；settings 的守卫测试扫描
-# 源码与资源，确保群号没有被当字面量复制到别处。任一失败即中止发布。
+# 源码与资源，确保群号没有被当字面量复制到别处。
+# database 的 *Migration* 是另一道闸：校验 Room 迁移链从 27 连续到当前
+# 版本（含端到端升级），断链意味着存量用户一升级就崩且无法自愈。
+# 任一失败即中止发布。
 ./gradlew --no-daemon architectureCheck \
   :core:common:testDebugUnitTest --tests '*AstronomyTest*' \
   :core:model:test --tests '*CommunityTest*' \
   :core:network:testDebugUnitTest --tests '*UpdateManifestParserTest*' \
+  :core:database:testDebugUnitTest --tests '*Migration*' \
   :feature:settings:testDebugUnitTest --tests '*CommunityNoHardcodedGroupIdTest*' \
   -q || {
   echo "架构或单测未通过，中止发布" >&2; exit 1; }

@@ -247,9 +247,10 @@ internal class ChatApi(
                                 slotByCallId[callId] = candidate
                                 candidate
                             }
-                            // 无 index 无 id 的分片：延续最近活跃调用（arguments 增量）
-                            lastActiveSlot != null -> lastActiveSlot!!
-                            else -> {
+                            // 无 index 无 id 的分片：延续最近活跃调用（arguments 增量）。
+                            // 用 elvis 而非 != null 分支：lastActiveSlot 是被 lambda 捕获的
+                            // var，Kotlin 无法 smart cast，在分支里直接取值只能写 !!。
+                            else -> lastActiveSlot ?: run {
                                 var candidate = nextSyntheticSlot++
                                 while (candidate in toolCalls) candidate = nextSyntheticSlot++
                                 candidate
