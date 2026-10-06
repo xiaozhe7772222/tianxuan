@@ -810,25 +810,6 @@ private fun AndroidEnvAcquisitionCard(
     }
 }
 
-private const val TIANXUAN_QQ_GROUP_ID = "964382207"
-
-/** 跳转 QQ 加群；未安装 QQ 时兜底复制群号并提示。 */
-private fun joinQqGroup(context: Context) {
-    val uri = Uri.parse(
-        "mqqapi://card/show_pslcard?src_type=internal&version=1&uin=$TIANXUAN_QQ_GROUP_ID&card_type=group&source=qrcode",
-    )
-    val intent = Intent(Intent.ACTION_VIEW, uri).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-    runCatching {
-        context.startActivity(intent)
-    }.onFailure {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        clipboard?.setPrimaryClip(
-            ClipData.newPlainText(context.getString(R.string.home_qq_clipboard_label), TIANXUAN_QQ_GROUP_ID),
-        )
-        Toast.makeText(context, context.getString(R.string.home_qq_copied, TIANXUAN_QQ_GROUP_ID), Toast.LENGTH_LONG).show()
-    }
-}
-
 /**
  * 运行时引擎主状态卡片
  */

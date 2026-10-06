@@ -229,7 +229,6 @@ private fun legacyStringResource(source: String): Int? = when (source) {
         "删除子智能体" -> R.string.settings_text_0061
         "删除服务" -> R.string.settings_text_0062
         "删除模型失败" -> R.string.settings_text_0063
-        "加入 QQ 交流群 (964382207)" -> R.string.settings_text_0064
         "助手名称" -> R.string.settings_text_0065
         "协议: Apache-2.0 License" -> R.string.settings_text_0066
         "单 Key RPM 需为非负整数" -> R.string.settings_text_0067
@@ -432,7 +431,6 @@ private fun legacyStringResource(source: String): Int? = when (source) {
         "网关服务" -> R.string.settings_text_0269
         "网络下载" -> R.string.settings_text_0270
         "网络下载 GGUF" -> R.string.settings_text_0271
-        "群号: 964382207 · 点击一键加群 / 复制群号" -> R.string.settings_text_0272
         "聊天界面中新生成的思考过程将默认展开呈现" -> R.string.settings_text_0273
         "职责简介" -> R.string.settings_text_0274
         "自动 (Auto)" -> R.string.settings_text_0275
@@ -533,49 +531,8 @@ private fun legacyStringResource(source: String): Int? = when (source) {
 @Composable
 private fun resolveLegacyString(source: String): String {
     legacyStringResource(source)?.let { return stringResource(it) }
-    // NOTE: raw 字符串不做转义处理，此处必须写 \d；写成 \\d 会匹配字面 "\d" 导致永不命中。
-    Regex("""(\d+) 套系统 · (.+)""").matchEntire(source)?.also {
-        return stringResource(R.string.settings_dynamic_system_mode, it.groupValues[1], it.groupValues[2])
-    }
-    Regex("""(\d+) 套系统""").matchEntire(source)?.also {
-        return stringResource(R.string.settings_dynamic_system_count, it.groupValues[1])
-    }
-    Regex("""(\d+) 个模型 · (\d+) 技能""").matchEntire(source)?.also {
-        return stringResource(R.string.settings_dynamic_model_skill_count, it.groupValues[1], it.groupValues[2])
-    }
-    Regex("""(\d+) 个模型""").matchEntire(source)?.also {
-        return stringResource(R.string.settings_dynamic_model_count, it.groupValues[1])
-    }
-    Regex("""(\d+) 个技能""").matchEntire(source)?.also {
-        return stringResource(R.string.settings_dynamic_skill_count, it.groupValues[1])
-    }
-    Regex("""(\d+) 个""").matchEntire(source)?.also {
-        return stringResource(R.string.settings_dynamic_item_count, it.groupValues[1])
-    }
-    Regex("""(\d+) 轮""").matchEntire(source)?.also {
-        return stringResource(R.string.settings_dynamic_round_count, it.groupValues[1])
-    }
-    Regex("""下载中：(.+) / (.+) MB""").matchEntire(source)?.also {
-        return stringResource(R.string.settings_dynamic_download_progress, it.groupValues[1], it.groupValues[2])
-    }
-    Regex("""已下载：(.+) MB""").matchEntire(source)?.also {
-        return stringResource(R.string.settings_dynamic_downloaded, it.groupValues[1])
-    }
-    if (source.startsWith("发现新版本 v")) {
-        return stringResource(R.string.settings_dynamic_new_version, source.removePrefix("发现新版本 v"))
-    }
-    if (source.startsWith("确定删除 ") && source.endsWith("？")) {
-        return stringResource(R.string.settings_dynamic_delete_confirm, source.removePrefix("确定删除 ").removeSuffix("？"))
-    }
-    Regex("""成功探测到 (\d+) 个工具""").matchEntire(source)?.also {
-        return stringResource(R.string.settings_dynamic_tool_count, it.groupValues[1])
-    }
-    Regex("""轮次用尽时先让模型收束并记录进度，再自动续跑，无需用户点击继续；总预算上限 (\d+) 轮""").matchEntire(source)?.also {
-        return stringResource(R.string.settings_text_0340, it.groupValues[1])
-    }
-    Regex("""(\d+) 次""").matchEntire(source)?.also {
-        return stringResource(R.string.settings_text_0341, it.groupValues[1])
-    }
+    // 运行时拼出的文案（计数、群号等）走结构匹配，见 SettingsLocalizationDynamic.kt
+    resolveDynamicString(source)?.let { return it }
     return source
 }
 

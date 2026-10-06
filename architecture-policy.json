@@ -108,7 +108,7 @@
       "id": "feature.components", "path": "feature/components",
       "requires": ["core.common", "core.model", "feature.theme"]
     },
-    { "id": "feature.home", "path": "feature/home", "requires": ["core.datastore", "runtime"] },
+    { "id": "feature.home", "path": "feature/home", "requires": ["core.datastore", "core.model", "runtime"] },
     {
       "id": "feature.chat",
       "path": "feature/chat",
@@ -126,7 +126,7 @@
     },
     {
       "id": "feature.settings", "path": "feature/settings",
-      "requires": ["core.database", "core.datastore", "core.network", "runtime", "tools", "harness", "feature.theme"]
+      "requires": ["core.database", "core.datastore", "core.model", "core.network", "runtime", "tools", "harness", "feature.theme"]
     },
     {
       "id": "feature.developer", "path": "feature/developer",

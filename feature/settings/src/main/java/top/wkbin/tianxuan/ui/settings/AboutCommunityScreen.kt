@@ -1,21 +1,17 @@
 package top.wkbin.tianxuan.ui.settings
 
-import org.koin.compose.viewmodel.koinViewModel
-import top.wkbin.tianxuan.ui.settings.LocalizedText as Text
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
@@ -28,13 +24,20 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.viewmodel.koinViewModel
+import top.wkbin.tianxuan.core.model.AppUpdateInfo
+import top.wkbin.tianxuan.core.model.Community
+import top.wkbin.tianxuan.core.model.UpdateCheckState
+import top.wkbin.tianxuan.ui.components.MarkdownText
 import top.wkbin.tianxuan.ui.components.RuntimeAlertDialog
 import top.wkbin.tianxuan.ui.components.RuntimeButton as Button
 import top.wkbin.tianxuan.ui.components.RuntimeCircularProgressIndicator as CircularProgressIndicator
@@ -44,7 +47,7 @@ import top.wkbin.tianxuan.ui.components.RuntimeLinearProgressIndicator as Linear
 import top.wkbin.tianxuan.ui.components.RuntimeOutlinedButton as OutlinedButton
 import top.wkbin.tianxuan.ui.components.RuntimeTextButton as TextButton
 import top.wkbin.tianxuan.ui.components.RuntimeTopBar
-import top.wkbin.tianxuan.ui.components.MarkdownText
+import top.wkbin.tianxuan.ui.settings.LocalizedText as Text
 
 /**
  * 二级子页 4：关于、版本更新与官方社区
@@ -59,16 +62,16 @@ fun AboutCommunityScreen(
     val updateCheckState by viewModel.updateCheckState.collectAsStateWithLifecycle()
     val downloadProgress by viewModel.downloadProgress.collectAsStateWithLifecycle()
     val isDownloading by viewModel.isDownloading.collectAsStateWithLifecycle()
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var showAboutDialog by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
-    var showReleaseNotesDialog by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    var showAboutDialog by rememberSaveable { mutableStateOf(false) }
+    var showReleaseNotesDialog by rememberSaveable { mutableStateOf(false) }
     val currentReleaseNotes by viewModel.currentReleaseNotes.collectAsStateWithLifecycle()
     val isLoadingReleaseNotes by viewModel.isLoadingReleaseNotes.collectAsStateWithLifecycle()
     val currentVersion = rememberAppVersion()
 
     // 版本更新弹窗
     when (val state = updateCheckState) {
-        is top.wkbin.tianxuan.core.model.UpdateCheckState.Success -> {
+        is UpdateCheckState.Success -> {
             if (state.info.hasUpdate) {
                 UpdateInfoDialog(
                     info = state.info,
@@ -107,7 +110,7 @@ fun AboutCommunityScreen(
                 )
             }
         }
-        is top.wkbin.tianxuan.core.model.UpdateCheckState.Error -> {
+        is UpdateCheckState.Error -> {
             RuntimeAlertDialog(
                 onDismissRequest = { viewModel.clearUpdateState() },
                 title = {
@@ -169,10 +172,10 @@ fun AboutCommunityScreen(
                         icon = RuntimeIconName.Update,
                         title = "检查新版本",
                         subtitle = "基于 GitHub Releases 自动检测与在线升级",
-                        value = if (updateCheckState is top.wkbin.tianxuan.core.model.UpdateCheckState.Checking) "检查中…" else "v$currentVersion",
+                        value = if (updateCheckState is UpdateCheckState.Checking) "检查中…" else "v$currentVersion",
                         onClick = {
                             // 检查进行中禁止重复触发
-                            if (updateCheckState !is top.wkbin.tianxuan.core.model.UpdateCheckState.Checking) {
+                            if (updateCheckState !is UpdateCheckState.Checking) {
                                 viewModel.checkForUpdates(currentVersion)
                             }
                         },
@@ -202,10 +205,10 @@ fun AboutCommunityScreen(
                         subtitle = "重新展示插件中心、工作坊、多会话终端等首次使用引导",
                         onClick = {
                             viewModel.replayFirstUseGuides()
-                            android.widget.Toast.makeText(
+                            Toast.makeText(
                                 context,
                                 "已重置功能引导，下次进入相应页面会重新展示",
-                                android.widget.Toast.LENGTH_SHORT,
+                                Toast.LENGTH_SHORT,
                             ).show()
                         },
                     )
@@ -214,7 +217,7 @@ fun AboutCommunityScreen(
 
             item {
                 Text(
-                    text = "官方社区与开源",
+                    text = "官方社区与动态",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
@@ -222,17 +225,19 @@ fun AboutCommunityScreen(
                 SettingsGroup {
                     SettingsRow(
                         icon = RuntimeIconName.Github,
-                        title = "GitHub 开源项目",
-                        subtitle = "$REPO_URL · 欢迎 Star 支持",
+                        title = "GitHub 项目主页",
+                        // 源码为私有仓库，此处只作为版本动态与发布记录的公示入口，
+                        // 不写「开源」「欢迎 Star」—— 与实际可见性矛盾
+                        subtitle = "$REPO_URL · 版本发布与更新公告",
                         onClick = { openBrowser(context, REPO_URL) },
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     SettingsRow(
                         icon = RuntimeIconName.Qq,
                         title = "官方 QQ 交流群",
-                        subtitle = "群号: 964382207 · 点击一键加群 / 复制群号",
-                        value = "964382207",
-                        onClick = { joinQqGroup(context, "964382207") },
+                        subtitle = Community.QQ_GROUP_LABEL_ZH,
+                        value = Community.QQ_GROUP_ID,
+                        onClick = { joinQqGroup(context) },
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     SettingsRow(
@@ -259,7 +264,7 @@ private fun AboutAppDialog(
     onDismiss: () -> Unit,
     onOpenReleaseNotes: () -> Unit,
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val appVersion = rememberAppVersion()
     RuntimeAlertDialog(
         onDismissRequest = onDismiss,
@@ -286,13 +291,13 @@ private fun AboutAppDialog(
                     Text("本版更新日志")
                 }
                 OutlinedButton(
-                    onClick = { joinQqGroup(context, "964382207") },
+                    onClick = { joinQqGroup(context) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp),
                 ) {
                     RuntimeIcon(RuntimeIconName.Chat, Modifier.size(16.dp), MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(8.dp))
-                    Text("加入 QQ 交流群 (964382207)")
+                    Text(Community.QQ_JOIN_LABEL_ZH)
                 }
             }
         },
@@ -304,7 +309,7 @@ private fun AboutAppDialog(
 
 @Composable
 private fun UpdateInfoDialog(
-    info: top.wkbin.tianxuan.core.model.AppUpdateInfo,
+    info: AppUpdateInfo,
     downloadProgress: Float?,
     isDownloading: Boolean,
     onDownload: () -> Unit,
@@ -390,36 +395,6 @@ private fun UpdateInfoDialog(
             }
         },
     )
-}
-
-private fun joinQqGroup(context: Context, groupId: String = "964382207") {
-    val uri = Uri.parse("mqqapi://card/show_pslcard?src_type=internal&version=1&uin=$groupId&card_type=group&source=qrcode")
-    val intent = Intent(Intent.ACTION_VIEW, uri).apply {
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-    runCatching {
-        context.startActivity(intent)
-    }.onFailure {
-        // 剪贴板兜底
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-        val clip = android.content.ClipData.newPlainText("天玄官方交流群", groupId)
-        clipboard?.setPrimaryClip(clip)
-        android.widget.Toast.makeText(context, "已复制 QQ 群号：$groupId，可打开 QQ 搜索加入", android.widget.Toast.LENGTH_LONG).show()
-    }
-}
-
-private fun openBrowser(context: Context, url: String) {
-    runCatching {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
-    }.onFailure {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-        val clip = android.content.ClipData.newPlainText("URL", url)
-        clipboard?.setPrimaryClip(clip)
-        android.widget.Toast.makeText(context, "已复制链接：$url", android.widget.Toast.LENGTH_SHORT).show()
-    }
 }
 
 @Composable

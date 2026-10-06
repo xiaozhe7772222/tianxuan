@@ -209,7 +209,6 @@
     <string name="settings_text_0061" formatted="false">删除子智能体</string>
     <string name="settings_text_0062" formatted="false">删除服务</string>
     <string name="settings_text_0063" formatted="false">删除模型失败</string>
-    <string name="settings_text_0064" formatted="false">加入 QQ 交流群 (964382207)</string>
     <string name="settings_text_0065" formatted="false">助手名称</string>
     <string name="settings_text_0066" formatted="false">协议: Apache-2.0 License</string>
     <string name="settings_text_0067" formatted="false">单 Key RPM 需为非负整数</string>
@@ -412,7 +411,6 @@
     <string name="settings_text_0269" formatted="false">网关服务</string>
     <string name="settings_text_0270" formatted="false">网络下载</string>
     <string name="settings_text_0271" formatted="false">网络下载 GGUF</string>
-    <string name="settings_text_0272" formatted="false">群号: 964382207 · 点击一键加群 / 复制群号</string>
     <string name="settings_text_0273" formatted="false">聊天界面中新生成的思考过程将默认展开呈现</string>
     <string name="settings_text_0274" formatted="false">职责简介</string>
     <string name="settings_text_0275" formatted="false">自动 (Auto)</string>
@@ -514,6 +512,9 @@
     <string name="settings_dynamic_model_count">%1$s 个模型</string>
     <string name="settings_dynamic_model_skill_count">%1$s 个模型 · %2$s 技能</string>
     <string name="settings_dynamic_skill_count">%1$s 个技能</string>
+    <!-- 群号不写死在资源里：由 Community.QQ_GROUP_ID 在运行时注入 -->
+    <string name="settings_dynamic_qq_group">群号: %1$s · 点击一键加群 / 复制群号</string>
+    <string name="settings_dynamic_qq_join">加入 QQ 交流群 (%1$s)</string>
     <string name="settings_dynamic_item_count">%1$s 个</string>
     <string name="settings_dynamic_round_count">%1$s 轮</string>
     <string name="settings_dynamic_new_version">发现新版本 v%1$s</string>

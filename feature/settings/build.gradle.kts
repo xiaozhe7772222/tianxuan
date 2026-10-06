@@ -11,6 +11,7 @@ dependencies {
     implementation(project(":core:datastore"))
     implementation(project(":core:database"))
     implementation(project(":core:network"))
+    implementation(project(":core:model"))
     implementation(project(":runtime"))
     implementation(project(":tools"))
     implementation(project(":harness"))

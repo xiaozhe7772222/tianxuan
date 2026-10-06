@@ -8,6 +8,7 @@ android {
 
 dependencies {
     implementation(project(":core:datastore"))
+    implementation(project(":core:model"))
     implementation(project(":runtime"))
     implementation(libs.androidx.activity.compose)
 }

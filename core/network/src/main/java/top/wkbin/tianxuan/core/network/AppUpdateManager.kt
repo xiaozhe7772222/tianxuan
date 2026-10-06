@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import top.wkbin.tianxuan.core.model.AppUpdateInfo
+import top.wkbin.tianxuan.core.model.Community
 import java.io.File
 import java.io.FileOutputStream
 
@@ -30,7 +31,9 @@ class AppUpdateManager(
 
     companion object {
         const val DEFAULT_REPO = UpdateSourceConfig.DEFAULT_REPO
-        const val QQ_GROUP_ID = "964382207"
+
+        /** 内测交流群。转发到 [Community]，避免此处成为第二真源 */
+        const val QQ_GROUP_ID = Community.QQ_GROUP_ID
 
         /** 仓库主页，供「关于」页与更新失败时的回退链接使用 */
         val DEFAULT_REPO_URL: String get() = "https://github.com/$DEFAULT_REPO"

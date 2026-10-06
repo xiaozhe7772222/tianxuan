@@ -209,7 +209,6 @@
     <string name="settings_text_0061" formatted="false">Delete Subagent</string>
     <string name="settings_text_0062" formatted="false">Delete service</string>
     <string name="settings_text_0063" formatted="false">Failed to delete model</string>
-    <string name="settings_text_0064" formatted="false">Join the QQ group (964382207)</string>
     <string name="settings_text_0065" formatted="false">Assistant Name</string>
     <string name="settings_text_0066" formatted="false">Protocol: Apache-2.0 License</string>
     <string name="settings_text_0067" formatted="false">Single Key rpm needs to be a non-negative integer</string>
@@ -412,7 +411,6 @@
     <string name="settings_text_0269" formatted="false">Gateway Services</string>
     <string name="settings_text_0270" formatted="false">Network Downloads</string>
     <string name="settings_text_0271" formatted="false">Download GGUF online</string>
-    <string name="settings_text_0272" formatted="false">Group number: 964382207 · Click to add group/copy group number</string>
     <string name="settings_text_0273" formatted="false">The newly generated thought process in the chat interface will be rendered by default</string>
     <string name="settings_text_0274" formatted="false">Introduction to Responsibilities</string>
     <string name="settings_text_0275" formatted="false">Auto</string>
@@ -514,6 +512,9 @@
     <string name="settings_dynamic_model_count">%1$s models</string>
     <string name="settings_dynamic_model_skill_count">%1$s models · %2$s skills</string>
     <string name="settings_dynamic_skill_count">%1$s skills</string>
+    <!-- 群号不写死在资源里：由 Community.QQ_GROUP_ID 在运行时注入 -->
+    <string name="settings_dynamic_qq_group">Group number: %1$s · Click to add group/copy group number</string>
+    <string name="settings_dynamic_qq_join">Join the QQ group (%1$s)</string>
     <string name="settings_dynamic_item_count">%1$s items</string>
     <string name="settings_dynamic_round_count">%1$s rounds</string>
     <string name="settings_dynamic_new_version">New version available: v%1$s</string>

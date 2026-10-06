@@ -37,10 +37,17 @@ command -v java >/dev/null || { echo "缺少 java，请先执行 source setup-en
 java -version 2>&1 | head -1
 gh auth status >/dev/null 2>&1 || { echo "gh 未登录" >&2; exit 1; }
 
-step "静态校验：架构棘轮 + 星象不变量"
-./gradlew --no-daemon architectureCheck :core:common:testDebugUnitTest \
-  --tests '*AstronomyTest*' -q || {
-    echo "架构或星象测试未通过，中止发布" >&2; exit 1; }
+step "静态校验：架构棘轮 + 星象不变量 + 社区坐标一致性"
+# core:model 是纯 Kotlin 模块（任务名 test 而非 testDebugUnitTest），
+# 其中的 CommunityTest 锁住群号唯一真源；settings 的守卫测试扫描
+# 源码与资源，确保群号没有被当字面量复制到别处。任一失败即中止发布。
+./gradlew --no-daemon architectureCheck \
+  :core:common:testDebugUnitTest --tests '*AstronomyTest*' \
+  :core:model:test --tests '*CommunityTest*' \
+  :core:network:testDebugUnitTest --tests '*UpdateManifestParserTest*' \
+  :feature:settings:testDebugUnitTest --tests '*CommunityNoHardcodedGroupIdTest*' \
+  -q || {
+  echo "架构或单测未通过，中止发布" >&2; exit 1; }
 
 step "构建 APK"
 APK_ARGS=()
