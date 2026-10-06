@@ -50,6 +50,10 @@ def rel_version(v):
 
 versions = []
 app_identity = {}
+# 同一版本只登记一次。current 是指向版本目录的符号链接，os.path.isdir()
+# 对它返回 True，于是同一个 APK 会以「<版本>/」和「current/」两条记录出现，
+# 版本号重复会让 latest 的选取依赖排序运气。以真实目录名去重。
+seen_apks = set()
 for entry in sorted(os.listdir(dist)):
     d = os.path.join(dist, entry)
     if not os.path.isdir(d):
@@ -59,6 +63,13 @@ for entry in sorted(os.listdir(dist)):
         continue
     apk = apks[0]
     apk_path = os.path.join(d, apk)
+
+    # 以解析出的版本号为去重键：current/ 与 0.21.0/ 指向同一个 APK，
+    # 解析结果相同，自然归为一条。用 realpath 兜住「两个目录指向同一文件」的情况。
+    real = os.path.realpath(apk_path)
+    if real in seen_apks:
+        continue
+    seen_apks.add(real)
 
     # 版本号与包名一律以 APK 实际内容为准，不从目录名反推：
     # 目录名是人写的，可能与构建产物不一致；versionCode 尤其不能猜。

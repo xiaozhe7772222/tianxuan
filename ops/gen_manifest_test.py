@@ -211,14 +211,46 @@ def test_idempotent():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_current_symlink_deduped():
+    """current 是指向版本目录的符号链接，同一 APK 不能登记成两条记录。
+
+    这不是洁癖：两条同版本号记录会让 latest 的选取依赖排序运气，
+    且 /versions 里出现同一个包两次，客户端按列表取首个时行为不确定。
+    """
+    tmp = tempfile.mkdtemp(prefix="gm-test-link-")
+    try:
+        dist = os.path.join(tmp, "dist")
+        os.makedirs(os.path.join(dist, "0.21.0"))
+        make_apk(os.path.join(dist, "0.21.0", "tianxuan-v0.21.0-release.apk"),
+                 "top.wkbin.tianxuan", "0.21.0", "30")
+        os.symlink(os.path.join(dist, "0.21.0"), os.path.join(dist, "current"))
+        apkmod = os.path.join(HERE, "apkmanifest.py")
+        manifest = os.path.join(dist, "manifest.json")
+        import subprocess
+        env = dict(os.environ, TIANXUAN_DIST=dist, TIANXUAN_APKMANIFEST=apkmod)
+        r = subprocess.run(["bash", GEN], capture_output=True, text=True, env=env)
+        check("符号链接不致脚本崩溃", r.returncode == 0, r.stderr.strip()[:200])
+        if r.returncode == 0:
+            data = json.load(open(manifest, encoding="utf-8"))
+            check("current 软链不产生重复版本记录",
+                  len(data["versions"]) == 1,
+                  "实际 %d 条：%s" % (len(data["versions"]),
+                                    [v["apk"] for v in data["versions"]]))
+            check("软链场景 latest 仍正确",
+                  data.get("latest") == "v0.21.0", "实际 %s" % data.get("latest"))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
     if not os.path.exists(GEN):
-        print("找不到 gen-manifest.sh：%s" % GEN)
+        print("找不到清单脚本：%s" % GEN)
         sys.exit(1)
     for fn in (test_latest_follows_version_code,
                test_app_metadata_from_newest,
                test_build_suffix_stripped,
                test_unparsable_code_sorts_last,
+               test_current_symlink_deduped,
                test_idempotent):
         print("\n[%s]" % fn.__name__)
         fn()
