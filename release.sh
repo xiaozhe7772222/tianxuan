@@ -186,15 +186,46 @@ if [[ "$PUBLISH" == "1" ]]; then
   # 上传到 .incoming 后校验 sha256 再原子改名：
   # 直接 scp 到目标路径时，传一半断线会留下一个大小不完整的 APK，
   # 而清单若已刷新，客户端就会拉到坏包且无法安装。
-  REMOTE_TMP="${DIST_BASE}/.incoming/${VERSION}-$(basename "$APK_PATH")"
-  ssh "$DIST_SSH" "install -d -m 755 '${DIST_BASE}/.incoming'"
-  scp "$APK_PATH" "$RELEASE_NOTES_FILE" "${DIST_SSH}:${REMOTE_TMP}" || die "APK 上传失败"
+  #
+  # .incoming 下必须按版本建**独立子目录**，不能把
+  # 「.incoming/<版本>-<文件名>」当落点。scp 传多个源文件时，
+  # 远端目标若不存在会被**创建成目录**并把所有源塞进去；于是
+  # 「.incoming/0.21.1-tianxuan-v0.21.1-release.apk」变成了目录，
+  # 随后的 `mv -f 该路径 0.21.1/` 把整个目录搬进了版本目录，
+  # APK 落在 0.21.1/0.21.1-tianxuan-...-release.apk/tianxuan-...apk，
+  # 服务端 sha256sum -c 找不到文件而失败。
+  # 症状是「发布最后一步报错」，但 tag、Release、APK 早已落地，
+  # 现场还留着一个嵌套目录。
+  #
+  # 修法：.incoming/<版本>/ 目录用 install -d 预先建好，scp 传到这个
+  # 已存在的目录（多文件目标必须是目录），再用 mv -t 逐个把文件搬到
+  # 版本目录——mv -t 把目标当普通目录而非「可能是目录的参数」。
+  REMOTE_TMP_DIR="${DIST_BASE}/.incoming/${VERSION}"
+  REMOTE_APK_NAME="$(basename "$APK_PATH")"
+  ssh "$DIST_SSH" "rm -rf '${REMOTE_TMP_DIR}' && install -d -m 755 '${REMOTE_TMP_DIR}'" \
+    || die "服务器建暂存目录失败：${REMOTE_TMP_DIR}"
+  # 末尾的 / 明确表示「传进这个目录」。scp 会把两个源都放进去。
+  scp "$APK_PATH" "$RELEASE_NOTES_FILE" "${DIST_SSH}:${REMOTE_TMP_DIR}/" \
+    || die "APK 上传失败"
+
+  # 校验通过后才落位。sha256sum -c 在 cd 后的版本目录里跑，
+  # 校验的是将要对外提供的那一份，而不是暂存目录里的一份。
+  # mv -T 把目标当普通文件/目录替换，避免目标不存在时
+  # 把「文件名」当成目录名而把源文件搬进去（mv 的经典陷阱）。
   ssh "$DIST_SSH" "install -d -m 755 '${DIST_BASE}/${VERSION}' && \
-    mv -f '${REMOTE_TMP}' '${DIST_BASE}/${VERSION}/' && \
+    mv -fT '${REMOTE_TMP_DIR}/${REMOTE_APK_NAME}' '${DIST_BASE}/${VERSION}/${REMOTE_APK_NAME}' && \
+    mv -fT '${REMOTE_TMP_DIR}/$(basename "$RELEASE_NOTES_FILE")' '${DIST_BASE}/${VERSION}/$(basename "$RELEASE_NOTES_FILE")' && \
+    rm -rf '${REMOTE_TMP_DIR}' && \
     cd '${DIST_BASE}/${VERSION}' && \
-    echo '${APK_SHA}  $(basename "$APK_PATH")' | sha256sum -c - || {
+    echo '${APK_SHA}  ${REMOTE_APK_NAME}' | sha256sum -c - || {
       echo '服务器侧 SHA-256 校验失败，已中止（未改动 current 指向）' >&2; exit 1; }" \
     || die "服务器侧 SHA-256 校验失败"
+
+  # 落位后确认 APK 真的以文件形态存在于版本目录里。
+  # mv/mkdir 的形态错误（目录而非文件）只能靠这一步拦住：
+  # 清单脚本若照此登记，用户会拿到 404 或一个装不上的包。
+  ssh "$DIST_SSH" "test -f '${DIST_BASE}/${VERSION}/${REMOTE_APK_NAME}'" \
+    || die "落位异常：${DIST_BASE}/${VERSION}/${REMOTE_APK_NAME} 不是普通文件（是否被 mv 成了目录？）"
 
   # current 是符号链接目标，过去用 `install -d current` 先造目录，
   # 再 `ln -sfn` 只会把链接建到目录里面去，形成 /current/current。
