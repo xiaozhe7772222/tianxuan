@@ -2,7 +2,9 @@ package top.wkbin.tianxuan.ui.navigation
 
 import org.koin.compose.viewmodel.koinViewModel
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
@@ -36,6 +38,8 @@ import top.wkbin.tianxuan.ui.chat.ChatScreen
 import top.wkbin.tianxuan.ui.chat.ChatViewModel
 import top.wkbin.tianxuan.ui.components.MainDestination
 import top.wkbin.tianxuan.ui.components.RuntimeBottomBar
+import top.wkbin.tianxuan.ui.components.RuntimeNavRail
+import top.wkbin.tianxuan.ui.components.rememberWidthClass
 import top.wkbin.tianxuan.ui.theme.LocalLiquidGlassBackdrop
 import top.wkbin.tianxuan.ui.developer.DeveloperScreen
 import top.wkbin.tianxuan.ui.developer.AdbLogcatScreen
@@ -758,20 +762,31 @@ fun TianXuanNavHost(
 
     val density = LocalDensity.current
     val liquidGlassBackdrop = LocalLiquidGlassBackdrop.current
-    val showLiquidBottomBar = liquidGlassBackdrop != null &&
+    // 宽屏（平板横屏）常驻侧栏，窄屏用底部栏。分支与叠放都在外壳里。
+    val widthClass = rememberWidthClass()
+    // 键盘弹出的判定只对底部栏有意义——侧栏不受 IME 影响。
+    val showLiquidBottomBar = !widthClass.usesPermanentNav &&
+        liquidGlassBackdrop != null &&
         activeStack.size == 1 &&
         WindowInsets.ime.getBottom(density) == 0
     // Hoist decorators so tab switches (key below) do not drop entry Saveable/ViewModel state.
     // Explicit <NavKey>: outside NavDisplay's parameter context, listOf cannot infer T.
     val entryDecorators = listOf(rememberSaveableStateHolderNavEntryDecorator<NavKey>(), rememberViewModelStoreNavEntryDecorator<NavKey>())
-    Box(modifier = Modifier.fillMaxSize()) {
+
+    AdaptiveNavigationScaffold(
+        selected = selectedMain,
+        onNavigate = ::navigateMain,
+        widthClass = widthClass,
+        hasLiquidBackdrop = liquidGlassBackdrop != null,
+        bottomBarVisible = showLiquidBottomBar,
+    ) { paneModifier ->
         // App background under NavDisplay so a rare uncovered frame never shows window black.
         Surface(
-            modifier = Modifier.fillMaxSize(),
+            modifier = paneModifier,
             color = MaterialTheme.colorScheme.background,
         ) {
-            // key(selectedMain): swapping the bottom tab replaces NavDisplay instead of animating
-            // between two unrelated back stacks (which looked like a page transition).
+            // key(selectedMain): swapping the bottom tab replaces NavDisplay instead of
+            // animating between two unrelated back stacks (which looked like a page transition).
             key(selectedMain) {
                 NavDisplay(
                     backStack = activeStack,
@@ -779,27 +794,6 @@ fun TianXuanNavHost(
                     onBack = ::popBack,
                     entryDecorators = entryDecorators,
                     entryProvider = appEntryProvider,
-                )
-            }
-        }
-        if (liquidGlassBackdrop != null) {
-            // Keep the expensive glass layers composed while a secondary destination is open.
-            // Recreating both backdrop render layers in the same frame as the root screen was
-            // the main source of pop-navigation stalls. Moving the retained bar off-screen also
-            // prevents its invisible click targets from intercepting the secondary page.
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .zIndex(if (showLiquidBottomBar) 1f else -1f)
-                    .graphicsLayer {
-                        alpha = if (showLiquidBottomBar) 1f else 0f
-                        translationY = if (showLiquidBottomBar) 0f else size.height
-                    },
-            ) {
-                RuntimeBottomBar(
-                    selected = selectedMain,
-                    onNavigate = ::navigateMain,
                 )
             }
         }
