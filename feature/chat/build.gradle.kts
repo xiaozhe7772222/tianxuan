@@ -23,4 +23,9 @@ dependencies {
     implementation(libs.bundles.coil)
 
     testImplementation(libs.bundles.test.robolectric)
+    testImplementation(libs.junit)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    // ui-test-manifest 必须进 debugImplementation 而非 testImplementation：
+    // 它提供的是被测组件所需的 Activity 清单，放到 test 作用域时测试环境里拿不到。
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

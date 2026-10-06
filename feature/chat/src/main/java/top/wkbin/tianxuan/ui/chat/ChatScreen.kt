@@ -421,7 +421,26 @@ fun ChatScreen(
     // 模型回复里的 /workspace、/attachments 等沙箱路径在此翻译为宿主真实文件，
     // 否则 Coil 会按 Android 根文件系统路径加载而必然失败。
     CompositionLocalProvider(LocalSandboxHostRoots provides viewModel.sandboxHostRoots) {
+    // 会话栏形态自适应（平板常驻可拖拽分栏 / 窄屏抽屉）由 ChatSessionsPane 收口，本文件不感知形态。
+    ChatSessionsPane(
+        sessions = sessions,
+        currentSessionId = currentSessionId,
+        workspaces = workspaces,
+        sessionRunStates = sessionRunStates,
+        drawerVisible = showSessions,
+        onDrawerVisibleChange = { showSessions = it },
+        onSwitch = viewModel::switchSession,
+        onNew = { showNewSession = true },
+        onCreateInWorkspace = { ws ->
+            viewModel.createSession(title = "", workspace = ws.linuxPath, projectType = ws.projectType.name)
+        },
+        onDelete = viewModel::deleteSession,
+        onRename = viewModel::renameSession,
+        onOpenSkills = { showSkillsMcpSheet = true },
+        onOpenRuntime = { showRuntimeTimeline = true },
+    ) { paneModifier ->
     Scaffold(
+        modifier = paneModifier,
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -722,40 +741,7 @@ fun ChatScreen(
         )
     }
 
-    SessionsSideDrawer(
-        visible = showSessions,
-        sessions = sessions,
-        currentSessionId = currentSessionId,
-        workspaces = workspaces,
-        sessionRunStates = sessionRunStates,
-        onDismiss = { showSessions = false },
-        onSwitch = { id ->
-            viewModel.switchSession(id)
-            showSessions = false
-        },
-        onNew = {
-            showSessions = false
-            showNewSession = true
-        },
-        onCreateInWorkspace = { ws ->
-            showSessions = false
-            viewModel.createSession(
-                title = "",
-                workspace = ws.linuxPath,
-                projectType = ws.projectType.name,
-            )
-        },
-        onDelete = viewModel::deleteSession,
-        onRename = viewModel::renameSession,
-        onOpenSkills = {
-            showSessions = false
-            showSkillsMcpSheet = true
-        },
-        onOpenRuntime = {
-            showSessions = false
-            showRuntimeTimeline = true
-        },
-    )
+    } // ChatSessionsPaneHost 的 content lambda 结束
 
     if (showNewSession) {
         NewSessionDialog(

@@ -141,6 +141,7 @@
     <string name="chat_drawer_create_in_project">在此项目中新建会话</string>
     <string name="chat_drawer_quick_skills">扩展与技能</string>
     <string name="chat_drawer_quick_runtime">运行活动</string>
+    <string name="chat_drawer_collapsed_rail">会话\n已收起</string>
     <string name="chat_time_just_now">刚刚</string>
     <string name="chat_time_minutes_ago">%1$d 分钟前</string>
     <string name="chat_time_hours_ago">%1$d 小时前</string>

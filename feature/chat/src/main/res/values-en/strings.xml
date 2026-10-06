@@ -120,6 +120,7 @@
     <string name="chat_drawer_create_in_project">Create new session in this project</string>
     <string name="chat_drawer_quick_skills">Extensions &amp; Skills</string>
     <string name="chat_drawer_quick_runtime">Runtime Activity</string>
+    <string name="chat_drawer_collapsed_rail">Sessions\ncollapsed</string>
     <string name="chat_time_just_now">Just now</string>
     <string name="chat_time_minutes_ago">%1$dm ago</string>
     <string name="chat_time_hours_ago">%1$dh ago</string>
