@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  天玄 · 启动图标：北斗七星。
+
+  星位取大熊座（UMa）真实位置：斗魁四星（天枢、天璇、天玑、天权）构成斗形，
+  斗柄三星（玉衡、开阳、摇光）自天权东出成弧；星点半径按视星等缩放。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+
+    <!-- 内容整体缩放，避免贴边 -->
+    <group
+        android:scaleX="0.82"
+        android:scaleY="0.82"
+        android:pivotX="512"
+        android:pivotY="512">
+
+        <!-- 斗魁连线（天枢→天璇→天玑→天权→天枢） -->
+        <path
+            android:pathData="M87,266.2 L87,681 L297,757.8 L230.4,486.4 Z"
+            android:strokeColor="#C8E8FA"
+            android:strokeWidth="3"
+            android:strokeAlpha="0.72"
+            android:strokeLineJoin="round" />
+
+        <!-- 斗柄连线（天权→玉衡→开阳→摇光） -->
+        <path
+            android:pathData="M230.4,486.4 L527.4,455.7 L732.2,563.2 L937,670.7"
+            android:strokeColor="#C8E8FA"
+            android:strokeWidth="3"
+            android:strokeAlpha="0.72"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+
+        <!-- 斗魁四星：青白 -->
+        <path android:fillColor="#E2F2FF" android:pathData="M87,266.2 m-25.8,0 a25.8,25.8 0 1,0 51.6,0 a25.8,25.8 0 1,0 -51.6,0" />
+        <path android:fillColor="#E2F2FF" android:pathData="M87,681 m-20.4,0 a20.4,20.4 0 1,0 40.8,0 a20.4,20.4 0 1,0 -40.8,0" />
+        <path android:fillColor="#E2F2FF" android:pathData="M297,757.8 m-19.7,0 a19.7,19.7 0 1,0 39.4,0 a19.7,19.7 0 1,0 -39.4,0" />
+        <path android:fillColor="#E2F2FF" android:pathData="M230.4,486.4 m-12.5,0 a12.5,12.5 0 1,0 25,0 a12.5,12.5 0 1,0 -25,0" />
+
+        <!-- 斗柄三星：暖白（玉衡为北斗最亮之星） -->
+        <path android:fillColor="#FFF6E4" android:pathData="M527.4,455.7 m-25.9,0 a25.9,25.9 0 1,0 51.8,0 a25.9,25.9 0 1,0 -51.8,0" />
+        <path android:fillColor="#FFF6E4" android:pathData="M732.2,563.2 m-21.3,0 a21.3,21.3 0 1,0 42.6,0 a21.3,21.3 0 1,0 -42.6,0" />
+        <path android:fillColor="#FFF6E4" android:pathData="M937,670.7 m-25.1,0 a25.1,25.1 0 1,0 50.2,0 a25.1,25.1 0 1,0 -50.2,0" />
+    </group>
+</vector>

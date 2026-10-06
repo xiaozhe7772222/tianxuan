@@ -1,0 +1,69 @@
+// Managed by TianXuan. Prefer the active toolchain environment and fall back to
+// the standard local offline-suite path.
+def tianxuanNdkPath = System.getenv('TIANXUAN_NDK_PATH') ?:
+    System.getenv('ANDROID_NDK_HOME') ?:
+    '/opt/tianxuan/toolchains/android/ndk'
+def tianxuanNdkProperties = new Properties()
+def tianxuanNdkSourceProperties = new File(tianxuanNdkPath, 'source.properties')
+if (tianxuanNdkSourceProperties.isFile()) {
+    tianxuanNdkSourceProperties.withInputStream { tianxuanNdkProperties.load(it) }
+}
+def tianxuanNdkVersion = tianxuanNdkProperties.getProperty('Pkg.Revision', '').trim()
+def tianxuanAndroidPluginIds = [
+    'com.android.application',
+    'com.android.library',
+    'com.android.dynamic-feature',
+    'com.android.test',
+    'com.android.kotlin.multiplatform.library'
+]
+
+gradle.beforeProject { project ->
+    tianxuanAndroidPluginIds.each { pluginId ->
+        project.pluginManager.withPlugin(pluginId) {
+            def androidExtension = project.extensions.findByName('android')
+            if (androidExtension != null && androidExtension.hasProperty('ndkPath')) {
+                androidExtension.ndkPath = tianxuanNdkPath
+                project.logger.info('TianXuan ARM64 NDK: ' + tianxuanNdkPath)
+            }
+        }
+    }
+}
+
+gradle.projectsEvaluated {
+    gradle.rootProject.allprojects.each { project ->
+        def androidExtension = project.extensions.findByName('android')
+        if (androidExtension != null && androidExtension.hasProperty('ndkPath')) {
+            def effective = androidExtension.ndkPath == null ? '' :
+                new File(androidExtension.ndkPath.toString()).canonicalPath
+            def expected = new File(tianxuanNdkPath).canonicalPath
+            if (effective != expected) {
+                throw new GradleException(
+                    'TianXuan blocked Android NDK path drift: ' + effective + ' != ' + expected
+                )
+            }
+            if (tianxuanNdkVersion && androidExtension.hasProperty('ndkVersion')) {
+                def declared = androidExtension.ndkVersion == null ? '' : androidExtension.ndkVersion.toString()
+            if (declared && tianxuanNdkVersion && declared != tianxuanNdkVersion) {
+                project.logger.warn('TianXuan aligning project NDK version ' + declared + ' -> ' + tianxuanNdkVersion)
+                androidExtension.ndkVersion = tianxuanNdkVersion
+            }
+            }
+            // ARM64-only sandbox: AAR dependencies (e.g. androidx.graphics.path)
+            // bundle x86/x86_64 native libraries and AGP packages every ABI
+            // present in the dependency graph unless abiFilters narrows it.
+            // Strip x86 ABIs here; when the project declares no filter at all,
+            // pin arm64-v8a so the final APK matches the host device.
+            try {
+                def ndkOptions = androidExtension.defaultConfig.ndk
+                def abiFilters = ndkOptions.abiFilters
+                abiFilters.removeAll(['x86', 'x86_64', 'armeabi-v7a'])
+                if (abiFilters.isEmpty()) {
+                    abiFilters.add('arm64-v8a')
+                }
+                project.logger.info('TianXuan ARM64 ABI filters: ' + abiFilters)
+            } catch (Throwable t) {
+                project.logger.warn('TianXuan ABI filter injection skipped: ' + t.message)
+            }
+        }
+    }
+}

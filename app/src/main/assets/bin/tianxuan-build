@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /bin/sh /opt/tianxuan/bin/tianxuan-build-guard tianxuan-build "$@"

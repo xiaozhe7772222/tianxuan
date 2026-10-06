@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="fa2ui_poc_title">A2UI 渲染器 PoC</string>
+    <string name="fa2ui_inject_sample">注入示例</string>
+    <string name="fa2ui_clear">清空</string>
+    <string name="fa2ui_empty_hint">暂无 A2UI 界面。让智能体调用 render_surface 工具，或点击右上角「注入示例」体验协议渲染。</string>
+</resources>

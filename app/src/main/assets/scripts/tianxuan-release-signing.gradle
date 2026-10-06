@@ -1,0 +1,33 @@
+// Managed by TianXuan. Release signing for sandbox Android/Flutter builds.
+// Activated only when the host app exports the TIANXUAN_KEYSTORE_* environment
+// variables before launching the build; debug builds see no change at all.
+def tianxuanStoreFile = System.getenv('TIANXUAN_KEYSTORE_FILE')
+def tianxuanStorePassword = System.getenv('TIANXUAN_KEYSTORE_STORE_PASSWORD')
+def tianxuanKeyAlias = System.getenv('TIANXUAN_KEYSTORE_KEY_ALIAS')
+def tianxuanKeyPassword = System.getenv('TIANXUAN_KEYSTORE_KEY_PASSWORD')
+
+if (tianxuanStoreFile && tianxuanStorePassword && tianxuanKeyAlias && tianxuanKeyPassword) {
+    gradle.afterProject { project ->
+        if (!project.pluginManager.hasPlugin('com.android.application')) {
+            return
+        }
+        def androidExtension = project.extensions.findByName('android')
+        if (androidExtension == null) {
+            return
+        }
+        def keystoreFile = new File(tianxuanStoreFile)
+        if (!keystoreFile.isFile()) {
+            project.logger.warn('TianXuan release signing skipped, keystore missing: ' + tianxuanStoreFile)
+            return
+        }
+        def signingConfig = androidExtension.signingConfigs.maybeCreate('tianxuanRelease')
+        signingConfig.storeFile = keystoreFile
+        signingConfig.storePassword = tianxuanStorePassword
+        signingConfig.keyAlias = tianxuanKeyAlias
+        signingConfig.keyPassword = tianxuanKeyPassword
+        // Force the release build type onto the TianXuan managed key, even if the
+        // project already declares its own signingConfig for release.
+        androidExtension.buildTypes.getByName('release').signingConfig = signingConfig
+        project.logger.lifecycle('TianXuan release signing enabled: ' + tianxuanStoreFile)
+    }
+}
