@@ -1,0 +1,22 @@
+[Unit]
+Description=TianXuan offline plugin bundle fetch (isolated, low priority)
+Documentation=man:wget(1)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+WorkingDirectory=/opt/tianxuan-offline
+ExecStart=/usr/local/bin/tianxuan-fetch.sh
+# 降低优先级，确保 fusion-gateway / logview / st-rotator / nginx 不受影响
+Nice=19
+IOSchedulingClass=idle
+CPUWeight=10
+IOWeight=10
+MemoryMax=256M
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

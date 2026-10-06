@@ -1,0 +1,4 @@
+# 离线包直链清单（含 QQ 闪传 rkey 会话凭证，14 天过期）
+# 只保留规格请用 offline-packages.json（已入库）
+ops/offline-manifest.json
+ops/offline-manifest.tsv

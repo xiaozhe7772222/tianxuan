@@ -1,0 +1,56 @@
+{
+  "_note": [
+    "离线包规格清单（脱敏）：只保留文件名与精确字节数，不含直链。",
+    "直链含 QQ 闪传的 rkey 会话凭证且 14 天过期，故不入库；",
+    "需要重新取链时按 ops/README.md 的「取链过程」操作，",
+    "再把含 url 的完整清单写到服务器 /tmp/tianxuan-manifest.tsv。",
+    "字节数是校验基准，不可由页面显示的 MB/GB 换算而来。"
+  ],
+  "total_bytes": 6911578380,
+  "packages": [
+    {
+      "name": "Android全栈开发套件-单体离线包-1.0.9-arm64.txplugin",
+      "size": 3009295789
+    },
+    {
+      "name": "Flutter跨平台开发环境-1.0.0-arm64.txplugin",
+      "size": 1205967688
+    },
+    {
+      "name": "Android核心基础环境-1.0.0-arm64.txplugin",
+      "size": 1108029878
+    },
+    {
+      "name": "C、C++与NDK原生构建链-1.0.0-arm64.txplugin",
+      "size": 637157113
+    },
+    {
+      "name": "Rust系统与Android-JNI交叉编译链-1.0.0-arm64.txplugin",
+      "size": 530441917
+    },
+    {
+      "name": "Android逆向分析与代码审计-1.0.0-arm64.txplugin",
+      "size": 162991149
+    },
+    {
+      "name": "AI科学计算与C扩展编译库-1.0.0-arm64.txplugin",
+      "size": 118207075
+    },
+    {
+      "name": "Node.js核心运行时-1.0.0-arm64.txplugin",
+      "size": 61283397
+    },
+    {
+      "name": "现代包管理器-yarn-1.0.0-arm64.txplugin",
+      "size": 49901704
+    },
+    {
+      "name": "Python3核心运行基座-1.0.0-arm64.txplugin",
+      "size": 17164034
+    },
+    {
+      "name": "代码检索四件套-rg、fd、fzf、bat-1.0.0-arm64.txplugin",
+      "size": 11138636
+    }
+  ]
+}

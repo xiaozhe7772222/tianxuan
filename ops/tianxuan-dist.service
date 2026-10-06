@@ -1,0 +1,42 @@
+[Unit]
+Description=TianXuan distribution & update service (isolated, read-only)
+Documentation=file:/usr/local/share/tianxuan/tianxuan_dist.py
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/tianxuan-dist
+Environment=TIANXUAN_DIST=/opt/tianxuan-dist
+Environment=TIANXUAN_DIST_PORT=8443
+Environment=TIANXUAN_DIST_BIND=0.0.0.0
+ExecStart=/usr/bin/python3 /usr/local/share/tianxuan/tianxuan_dist.py
+Restart=on-failure
+RestartSec=3
+
+# 隔离：不与既有服务共享优先级，也不允许写系统目录
+Nice=19
+IOSchedulingClass=idle
+CPUWeight=10
+IOWeight=10
+MemoryMax=192M
+
+# 加固：只读根文件系统，仅 dist 可写；禁止提权与新特权
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+ReadWritePaths=/opt/tianxuan-dist
+RestrictAddressFamilies=AF_INET AF_INET6
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tianxuan-dist
+
+[Install]
+WantedBy=multi-user.target
