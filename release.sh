@@ -212,13 +212,47 @@ if [[ "$PUBLISH" == "1" ]]; then
     || die "清单刷新失败：请确认服务器已部署 gen-tianxuan-manifest.sh（见 ops/DEPLOY.md）"
 
   step "公网自检"
-  BASE_URL="${TIANXUAN_DIST_URL:-http://${DIST_SSH##*@}:8443}"
+  # 必须走客户端真实使用的入口：APP 内 UpdateSourceConfig.DEFAULT_BASE_URL
+  # 是 https://<IP>，请求路径带 /tx-update 前缀（nginx 反代到 127.0.0.1:8443）。
+  # 过去这里默认打 http://<IP>:8443，但 8443 只监听在本机、且腾讯云安全组
+  # 未放行该端口，公网必然连不上——于是每次带 --publish 的发布都在最后一步
+  # 中止，而此时 tag、Release、APK 都已落地，current 也已指向新版，
+  # 留下「发布成功但脚本报失败」的假象，且没有任何回滚。
+  # 端口通不通由腾讯云安全组决定，不能作为发布成败的判据；
+  # 自检只验证「客户端会用的那条路」是否通。
+  BASE_URL="${TIANXUAN_DIST_URL:-https://${DIST_SSH##*@}/tx-update}"
   curl -fsS --max-time 15 "${BASE_URL}/healthz" >/dev/null || die "/healthz 不通"
   echo "/healthz 正常"
-  curl -fsS --max-time 15 "${BASE_URL}/latest" \
-    | grep -q "\"version\":\"${VERSION}\"" \
-    || die "服务器清单里的最新版本不是 ${VERSION}，客户端会拉到旧包"
+
+  # 用 JSON 解析而不是 grep 字面量。服务器输出的是 json.dumps 默认格式，
+  # 键值之间有空格（{"version": "0.21.0"}），脚本原先 grep '"version":"X"'
+  # 一律匹配不上——自检永远失败，且失败点在发布已完成之后。
+  # 用解析器比对字段，格式变化（空格、缩进、字段顺序）都不会再误判。
+  LATEST_JSON="$(curl -fsS --max-time 15 "${BASE_URL}/latest")" \
+    || die "/latest 请求失败"
+  REMOTE_VERSION="$(printf '%s' "$LATEST_JSON" | python3 -c \
+    'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null)" \
+    || die "/latest 返回的不是合法 JSON：${LATEST_JSON:0:200}"
+  [[ "$REMOTE_VERSION" == "$VERSION" ]] \
+    || die "服务器清单里的最新版本是 '${REMOTE_VERSION}'，不是 ${VERSION}，客户端会拉到旧包"
   echo "/latest 已指向 ${VERSION}"
+
+  # 光验证清单不够：清单说有这版、实际下载 404 或拿到 HTML 错误页，
+  # 用户点「立即更新」照样失败。Range 请求返回 206 既验证了文件存在，
+  # 也验证了断点续传可用（38MB 的包在移动网络下几乎必须）。
+  HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
+    -H 'Range: bytes=0-1023' "${BASE_URL}/apk/${VERSION}")
+  [[ "$HTTP_CODE" == "206" ]] \
+    || die "/apk/${VERSION} Range 请求返回 ${HTTP_CODE}，期望 206（APK 不可下载或不支持续传）"
+  echo "/apk/${VERSION} Range 返回 206，断点续传可用"
+
+  # 客户端按清单里的 sha256 校验下载，服务器上的包必须与清单登记的一致。
+  REMOTE_SHA="$(printf '%s' "$LATEST_JSON" | python3 -c \
+    'import json,sys; print(json.load(sys.stdin).get("sha256",""))' 2>/dev/null)"
+  [[ -n "$REMOTE_SHA" ]] || die "清单里没有 sha256 字段，客户端无法校验下载"
+  [[ "$REMOTE_SHA" == "$APK_SHA" ]] \
+    || die "清单登记的 sha256=${REMOTE_SHA} 与本机构建产物 ${APK_SHA} 不一致，客户端会拒绝安装"
+  echo "清单 sha256 与本机构建产物一致"
   echo "提醒：本次未改动任何既有服务（fusion-gateway / logview / st-rotator / st-auth / nginx）"
 fi
 
