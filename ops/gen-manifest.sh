@@ -64,7 +64,11 @@ for entry in sorted(os.listdir(dist)):
     # 目录名是人写的，可能与构建产物不一致；versionCode 尤其不能猜。
     pkg, vname, vcode = apkmanifest.apk_identity(apk_path)
     version = rel_version(vname) if vname else entry
-    app_identity = {"package": pkg, "versionName": version}
+    # app 元数据取「版本号最高」的那个 APK，而不是最后一个被遍历到的目录。
+    # 原写法在循环里直接覆盖，目录按字母序遍历，0.9.0 会覆盖 0.21.0 的包名，
+    # 首页展示的包名与实际可下载包对不上。
+    if not app_identity or ver_key(version) > ver_key(app_identity["versionName"]):
+        app_identity = {"package": pkg, "versionName": version}
 
     versions.append({
         "version": version,
@@ -81,7 +85,11 @@ for entry in sorted(os.listdir(dist)):
         "notes_file": "%s/RELEASE_NOTES.md" % entry,
     })
 
-versions.sort(key=lambda v: ver_key(v["version"]), reverse=True)
+# 按 versionCode 降序：客户端用 versionCode 判覆盖安装顺序，
+# versionName 只用于展示。两者不一致时（手改目录名）以 versionCode 为准，
+# 否则会出现「包号更大但版本号显示更旧」的矛盾。
+# 读不到 versionCode 的排在最后：宁可不推荐，也不要把坏包推成 latest。
+versions.sort(key=lambda v: (v["versionCode"], ver_key(v["version"])), reverse=True)
 
 manifest = {
     "app": {"package": app_identity.get("package", ""),

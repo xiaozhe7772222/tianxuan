@@ -34,16 +34,38 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 版本号真源在 gradle.properties。这里不做自己的解析，只读取并在 tag
+      # 已存在时校验它与真源一致——过去用 `grep 'val appVersionName' app/build.gradle.kts`
+      # 反解，一旦 Gradle 改成从属性读（更正确的做法），grep 就会静默返回空串，
+      # 产出一个名为 v 的 tag。
       - name: Determine Version Tag
         id: version
         run: |
+          set -euo pipefail
+          VERSION=$(grep -E '^tianxuan\.versionName=' gradle.properties | tail -n 1 | cut -d= -f2- | tr -d '[:space:]')
+          VERSION_CODE=$(grep -E '^tianxuan\.versionCode=' gradle.properties | tail -n 1 | cut -d= -f2- | tr -d '[:space:]')
+          if [ -z "$VERSION" ]; then
+            echo "::error::gradle.properties 缺少 tianxuan.versionName"
+            exit 1
+          fi
+          echo "versionName=${VERSION} versionCode=${VERSION_CODE}"
+
           if [ -n "${{ github.event.inputs.tag_name }}" ]; then
             TAG="${{ github.event.inputs.tag_name }}"
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${{ github.ref_name }}"
           else
-            VERSION=$(grep 'val appVersionName' app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/')
             TAG="v${VERSION}"
+          fi
+
+          # tag 推送触发的构建，tag 必须等于真源版本号。不等就说明有人手改 tag
+          # 或忘了同步 gradle.properties，发出去的 APK 会与 tag 不符。
+          if [[ "${{ github.ref }}" == refs/tags/* || -n "${{ github.event.inputs.tag_name }}" ]]; then
+            EXPECTED="v${VERSION}"
+            if [ "$TAG" != "$EXPECTED" ]; then
+              echo "::error::tag ${TAG} 与 gradle.properties 的版本号 ${EXPECTED} 不一致，中止发布"
+              exit 1
+            fi
           fi
           echo "TARGET_TAG=$TAG" >> "$GITHUB_ENV"
           echo "Using version tag: $TAG"
@@ -105,10 +127,49 @@ jobs:
             -alias "$TIANXUAN_RELEASE_KEY_ALIAS" > /dev/null
           ./gradlew assembleRelease --no-daemon --stacktrace
 
+      # 校验产物身份：不信任 Gradle 声明的版本，直接读 APK 里的清单。
+      # 与 tag 不符的包一旦发出去，客户端按 versionName 比对会判定不出更新，
+      # 而用户看到的是「已发布新版」。
+      - name: Verify APK Identity
+        env:
+          TAG: ${{ env.TARGET_TAG }}
+        run: |
+          set -euo pipefail
+          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          [ -f "$APK_PATH" ] || { echo "::error::未找到 release APK"; exit 1; }
+          EXPECT_NAME="${TAG#v}"
+          # 读二进制 AXML：Python 标准库即可，不为此在 runner 上装 Android SDK
+          IDENTITY=$(python3 - "$APK_PATH" <<'PY'
+          import re, sys, zipfile
+          # 复用仓库内的解析器，保证 CI 与本地脚本、服务器清单用同一套逻辑
+          import importlib.util, os
+          spec = importlib.util.spec_from_file_location(
+              "apkmanifest", os.path.join(os.getcwd(), "ops", "apkmanifest.py"))
+          am = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(am)
+          pkg, vn, vc = am.apk_identity(sys.argv[1])
+          print("package=%s versionName=%s versionCode=%s" % (pkg, vn, vc))
+          PY
+          )
+          echo "$IDENTITY"
+          APK_NAME=$(echo "$IDENTITY" | sed -E 's/.*versionName=([^ ]*).*/\1/')
+          APK_NAME="${APK_NAME%%[-+]*}"
+          APK_CODE=$(echo "$IDENTITY" | sed -E 's/.*versionCode=([^ ]*).*/\1/')
+          SOURCE_CODE=$(grep -E '^tianxuan\.versionCode=' gradle.properties | tail -n 1 | cut -d= -f2- | tr -d '[:space:]')
+          if [ "$APK_NAME" != "$EXPECT_NAME" ]; then
+            echo "::error::产物 versionName=${APK_NAME} 与 tag ${EXPECT_NAME} 不符"
+            exit 1
+          fi
+          if [ "$APK_CODE" != "$SOURCE_CODE" ]; then
+            echo "::error::产物 versionCode=${APK_CODE} 与 gradle.properties 的 ${SOURCE_CODE} 不符"
+            exit 1
+          fi
+          echo "APK_PATH=$APK_PATH" >> $GITHUB_ENV
+
       - name: Identify and Rename Output APK
         run: |
           mkdir -p output
-          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          APK_PATH="${{ env.APK_PATH }}"
           if [ -f "$APK_PATH" ]; then
             TAG="${{ env.TARGET_TAG }}"
             cp "$APK_PATH" "output/TianXuan-arm64-${TAG}.apk"

@@ -6,8 +6,38 @@ import java.util.Properties
 import org.gradle.kotlin.dsl.configure
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-val appVersionName = "0.20.0"
-val appVersionCode = 29
+// 语义化版本号：x.y.z，可带 -rc1 / -dev 之类预发布后缀。
+// 不用 \d+\.\d+\.\d+ 之外的花样，是为了让客户端的 parts() 分段比较有确定语义。
+val SEMVER_PATTERN = Regex("""\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?""")
+
+// 版本号真源在根 gradle.properties（tianxuan.versionName / tianxuan.versionCode）。
+// 曾经写死在这里，而 release.sh 另收一个位置参数、CI 再 grep 本文件反解一次，
+// 三处独立来源会各自漂移——最坏情况是构建出 versionName 与 tag 不符的 APK，
+// 客户端「检查更新」按 versionName 语义比对，会判定不出该有的更新。
+val appVersionName: String = providers.gradleProperty("tianxuan.versionName").orNull?.trim().orEmpty()
+val appVersionCodeRaw: String = providers.gradleProperty("tianxuan.versionCode").orNull?.trim().orEmpty()
+
+require(SEMVER_PATTERN.matches(appVersionName)) {
+    "tianxuan.versionName 必须形如 0.21.0（x.y.z，可带 -rc1 预发布后缀），实际为 \"$appVersionName\""
+}
+val appVersionCode: Int = appVersionCodeRaw.toIntOrNull()
+    ?: error("tianxuan.versionCode 必须是正整数，实际为 \"$appVersionCodeRaw\"")
+require(appVersionCode > 0) {
+    "tianxuan.versionCode 必须为正整数（Android 用它判断能否覆盖安装），实际为 $appVersionCode"
+}
+
+// 是否对 release 变体启用 R8 混淆与资源压缩。
+// 内测阶段为 false —— 混淆会让「崩溃堆栈不可读」，内测期排障本就依赖可读堆栈，
+// 关掉同时也把构建时间从十分钟级压回分钟级。对外正式发布前改回 true 即可。
+val tianxuanMinify: Boolean = providers.gradleProperty("tianxuan.minify")
+    .orNull?.trim()?.toBooleanStrictOrNull()
+    ?: false
+
+// release 变体是否带 LeakCanary。内测期 true，正式对外发布前应置 false——
+// 它会在应用内弹窗展示泄漏堆栈，属于开发工具，不该出现在用户手机上。
+val tianxuanLeakCanary: Boolean = providers.gradleProperty("tianxuan.leakcanary")
+    .orNull?.trim()?.toBooleanStrictOrNull()
+    ?: true
 
 // TianXuanDev 双包构建开关：CI（.github/workflows/tianxuandev-build.yml）设 TIANXUAN_DEV_BUILD=1 时，
 // 产出独立预览包 top.wkbin.tianxuan.dev / 应用名 TianXuanDev / 版本后缀 -dev，
@@ -83,6 +113,10 @@ extensions.configure<ApplicationExtension> {
                 storePassword = signingStorePassword
                 keyAlias = signingKeyAlias
                 keyPassword = signingKeyPassword
+                // v3 签名（密钥轮换支持）。minSdk 29 只需 v2，但 v3 让日后更换密钥时
+                // 新旧包可共存安装，不必强制用户先卸载——内测期就把这个能力装上，
+                // 免得真要轮换密钥时才发现签名方案没跟上。
+                enableV3Signing = true
             }
         }
     }
@@ -102,8 +136,20 @@ extensions.configure<ApplicationExtension> {
         }
         release {
             manifestPlaceholders["appLabel"] = if (tianXuanDevBuild) "TianXuanDev" else "天玄"
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // 内测阶段不开R8 混淆与资源压缩。
+            //
+            // 关闭的是「防反编译」，不是签名：签名是 Android 的安装前提，
+            // 与保密无关，下面照样用 release keystore 签。
+            //
+            // 为什么仍要走 release 变体而不是直接发 debug 包：
+            // debug 带 applicationIdSuffix=".debug"，包名是 top.wkbin.tianxuan.debug，
+            // 与正式包 top.wkbin.tianxuan 是两个不同应用。用户先装内测包再装正式版时，
+            // 会出现两个「天玄」并存、互相抢无障碍与输入法权限，且无法覆盖升级。
+            //
+            // 开关放在 gradle.properties：正式对外发布前把 tianxuan.minify 置 true 即可
+            // 恢复混淆（proguard 规则已就绪，无需再改代码）。
+            isMinifyEnabled = tianxuanMinify
+            isShrinkResources = tianxuanMinify
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -151,7 +197,13 @@ dependencies {
 }
 
 dependencies {
+    // LeakCanary：内测期是排障主力（内存泄漏在平板上比在桌面更难复现与定位）。
+    // debug 构建恒开；release 由 tianxuan.leakcanary 控制，
+    // 因为内测包走 release 变体，若只在 debug 声明，内测用户反而拿不到泄漏报告。
     debugImplementation(libs.leakcanary.android)
+    if (tianxuanLeakCanary) {
+        releaseImplementation(libs.leakcanary.android)
+    }
     implementation(project(":core:common"))
     implementation(project(":core:model"))
     implementation(project(":core:database"))

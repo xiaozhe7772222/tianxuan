@@ -22,7 +22,7 @@
 SSHK=~/.ssh/tianxuan   # 或 ssh -i /root/tuzhe_key
 D=124.222.37.253
 
-for f in tianxuan_dist.py apkmanifest.py apkmanifest_test.py; do
+for f in tianxuan_dist.py apkmanifest.py apkmanifest_test.py gen_manifest_test.py; do
   scp -i "$SSHK" "$f" root@$D:/usr/local/share/tianxuan/
 done
 for f in gen-manifest.sh sync-tianxuan-plugins.sh tianxuan-fetch.sh; do
@@ -33,14 +33,20 @@ for f in tianxuan-dist.service tianxuan-fetch.service; do
 done
 
 ssh -i "$SSHK" root@$D '
+  mv -f /usr/local/bin/gen-manifest.sh /usr/local/bin/gen-tianxuan-manifest.sh
   chmod +x /usr/local/bin/{gen-tianxuan-manifest,sync-tianxuan-plugins,tianxuan-fetch}.sh
-  python3 /usr/local/share/tianxuan/apkmanifest_test.py     # 先自测
+  cd /usr/local/share/tianxuan
+  python3 apkmanifest_test.py     # 先自测：清单解析器
+  python3 gen_manifest_test.py    # 再自测：latest 选取与排序
   systemctl daemon-reload
   /usr/local/bin/sync-tianxuan-plugins                     # 补软链
   /usr/local/bin/gen-tianxuan-manifest                     # 刷新清单
   systemctl restart tianxuan-dist
 '
 ```
+
+`gen_manifest_test.py` 必须在部署机上与 `gen-manifest.sh` 同目录：
+它用相对路径找脚本，并从同目录取 `apkmanifest.py`。
 
 ## 首次部署（空机器）
 
