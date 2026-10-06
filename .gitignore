@@ -77,4 +77,10 @@ scripts_patch/
 .tianxuan-outputs/
 .tianxuan-subagent/
 
+# release.sh 生成的更新说明。它是每次发布的临时产物（内容随 commit 变化），
+# 已作为 Release 资产上传，正常结束时脚本会 rm 掉；但脚本中途 die 时不会走到
+# 清理那一步，文件就留在仓库根目录，使下一次发布开头的「工作区必须干净」检查
+# 直接失败——发布被上一次发布的残留挡住，且残留内容还挂在 GitHub 上。
+RELEASE_NOTES.md
+
 
