@@ -1,13 +1,13 @@
 {
     "_doc": [
-        "\u67b6\u6784\u68d8\u8f6e\u57fa\u7ebf\uff1a\u6536\u5f55\u5b58\u91cf\u8d85\u8fc7 maxFileLines \u7684\u6e90\u6587\u4ef6\uff08\u884c\u6570\u5feb\u7167\uff09\u3002",
-        "\u89c4\u5219\uff1a\u6761\u76ee\u884c\u6570\u53ea\u80fd\u4e0b\u8c03\uff08\u4ee3\u7801\u7f29\u51cf\u540e\u5e94\u4e0b\u8c03\u6216\u5220\u9664\u6761\u76ee\uff09\uff1b\u6587\u4ef6\u884c\u6570\u8d85\u8fc7\u57fa\u7ebf\u503c = \u67b6\u6784\u8fdd\u89c4\u3002",
-        "\u4e0d\u5728\u57fa\u7ebf\u4e2d\u7684\u65b0\u6587\u4ef6\u5fc5\u987b <= architecture-policy.json \u7684 global.maxFileLines\u3002",
-        "\u7ef4\u62a4\uff1a\u8fd0\u884c .\\gradlew.bat architectureBaselineSync \u81ea\u52a8\u540c\u6b65\u3002"
+        "架构棘轮基线：收录存量超过 maxFileLines 的源文件（行数快照）。",
+        "规则：条目行数只能下调（代码缩减后应下调或删除条目）；文件行数超过基线值 = 架构违规。",
+        "不在基线中的新文件必须 <= architecture-policy.json 的 global.maxFileLines。",
+        "维护：运行 .\\gradlew.bat architectureBaselineSync 自动同步。"
     ],
     "generatedAt": "2026-09-29",
     "maxFileLines": 400,
-    "fileCount": 114,
+    "fileCount": 113,
     "files": {
         "core/database/src/main/java/top/wkbin/tianxuan/core/database/PersistenceRepositories.kt": 463,
         "core/datastore/src/main/java/top/wkbin/tianxuan/core/datastore/SettingsDataStore.kt": 1003,
@@ -116,7 +116,6 @@
         "runtime/src/main/java/top/wkbin/tianxuan/runtime/rootfs/OciRegistryClient.kt": 402,
         "runtime/src/main/java/top/wkbin/tianxuan/runtime/rootfs/RootfsInstaller.kt": 436,
         "runtime/src/main/java/top/wkbin/tianxuan/runtime/rootfs/TarStreamExtractor.kt": 416,
-        "runtime/src/main/java/top/wkbin/tianxuan/runtime/terminal/AnsiTerminalBuffer.kt": 571,
         "runtime/src/main/java/top/wkbin/tianxuan/runtime/webchat/WebChatBridgeServer.kt": 672,
         "showerclient/src/main/java/com/ai/assistance/showerclient/ShowerController.kt": 485,
         "tools/src/main/java/top/wkbin/tianxuan/core/tools/ToolManager.kt": 1131,
