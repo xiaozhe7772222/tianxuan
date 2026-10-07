@@ -92,12 +92,24 @@ internal object CcSwitchCredentials {
         return res.isSuccess
     }
 
-    private fun writeScript(password: String): String = """
-        DIR="${'$'}{HOME:-/root}/.cc-switch"
-        mkdir -p "${'$'}DIR" 2>/dev/null || true
-        printf '%s' "$password" > "${'$'}DIR/web_password" 2>/dev/null || true
-        chmod 600 "${'$'}DIR/web_password" 2>/dev/null || true
-    """.trimIndent()
+    /**
+     * 构造写入口令的脚本。
+     *
+     * **口令绝不能以插值方式进入命令行。** 旧实现是
+     * `printf '%s' "$password"`，即把 Kotlin 变量直接拼进 shell 双引号串；
+     * 而 `commandLine` 最终以 `sh -lc <commandLine>` 的形式交给 guest shell
+     * （见 ProotCommandBuilder：`add(GUEST_SHELL); add("-lc"); add(commandLine)`），
+     * 双引号内的 `$()`、反引号仍会被求值。实测 `pa` 加反引号包裹的 id 加 `ss`
+     * 会被执行并回显 `uid=0(root)`——即口令里的一段文本变成沙箱内的命令执行。
+     *
+     * 改为参数化：口令经 [shellQuoteForSingleLine] 单引号折叠后作为 printf 的
+     * 位置参数传入。单引号内除 `'` 外一切字符都是字面量，而 `'` 本身被折叠为
+     * `'\''`。
+     *
+     * 实现委托给顶层 [buildWriteScript]：本对象是 `internal object`，其私有成员
+     * 无法从单测触达，而这段拼接一旦回退就是命令注入，必须有测试直接钉住。
+     */
+    private fun writeScript(password: String): String = buildWriteScript(password)
 
     /** 用户名口令各占一行输出，用此标记切分。 */
     private const val FIELD_SEPARATOR = "---TIANXUAN_SPLIT---"
@@ -126,3 +138,23 @@ internal object CcSwitchCredentials {
         cat "${'$'}PASS_FILE" 2>/dev/null || echo ""
     """.trimIndent()
 }
+
+/**
+ * 单引号折叠实现。提成顶层函数是为了能在没有 `Context`/`LinuxRuntime` 的单测里
+ * 直接覆盖——`internal object` 的私有成员无法从测试触达，而这段逻辑一旦被改错
+ * 就是命令注入，必须有测试钉住。
+ */
+internal fun shellQuoteForSingleLine(value: String): String = "'" + value.replace("'", "'\\''") + "'"
+
+/**
+ * 写入口令的完整脚本。与 [shellQuoteForSingleLine] 同理提到顶层以便测试。
+ *
+ * 守卫要点：口令必须以 [shellQuoteForSingleLine] 的结果出现，**不得**以裸值
+ * 出现在双引号里。测试会断言生成的脚本中不含未折叠的口令原文。
+ */
+internal fun buildWriteScript(password: String): String = """
+    DIR="${'$'}{HOME:-/root}/.cc-switch"
+    mkdir -p "${'$'}DIR" 2>/dev/null || true
+    printf '%s' ${shellQuoteForSingleLine(password)} > "${'$'}DIR/web_password" 2>/dev/null || true
+    chmod 600 "${'$'}DIR/web_password" 2>/dev/null || true
+""".trimIndent()

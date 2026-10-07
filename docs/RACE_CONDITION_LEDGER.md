@@ -1204,3 +1204,96 @@ payload 目录，装出来的永远是旧内容，**不报任何错误**。这�
 
 `tools` **+5**（新增 `ToolVersionOrderingTest`）、`app` **+4**
 （新增 `ToolManifestVersionPatternTest`）。全项目 `1089 tests, 0 failures, 0 errors`（`architectureCheck` 绿）。
+
+---
+
+## 复核批次八：feature/settings 起步 + app 服务面（2026-10-07）
+
+### 缺陷 #7（已修）：`CcSwitchCredentials.writeScript` 把口令插值进 shell 双引号 → 命令注入
+
+**位置**：`feature/settings/.../CcSwitchCredentials.kt`。
+
+**成因**：`writeScript(password)` 用 Kotlin 字符串模板把口令拼进 shell 串：
+
+```kotlin
+printf '%s' "$password" > "$DIR/web_password"
+```
+
+这里 `$password` 是 **Kotlin 侧的值**，不是 shell 变量——模板展开后它成了命令行的字面文本。而
+`commandLine` 最终以 `sh -lc <commandLine>` 交给 guest shell
+（见 `ProotCommandBuilder`：`add(GUEST_SHELL); add("-lc"); add(commandLine)`，
+「commandLine 已由调用方完成 shell 引用」正是把引用责任交给了调用方）。双引号内
+`$(...)`、反引号、`\` 仍会被求值，因此口令里的文本变成了可执行代码。
+
+**可达性**：`resetWebPassword` 目前唯一调用者是 `rotateWebPassword()`，其口令来自
+`generatePassword()`，字符集受 `ALPHABET` 白名单约束，**当下不可注入**。但
+`resetWebPassword(newPassword: String)` 本身是公开 API 且已有 UI 提示「重置密码」，
+任何后续接入自定义口令输入框的改动都会立刻使注入可达——这是**必须现在修**的
+默认安全（secure-by-default）问题，不能靠「当前调用者恰好安全」维持。
+
+**实测复现**（`sh -lc` 单参数语义，与 ProotCommandBuilder 一致）：
+
+| 输入口令 | 修复前 | 修复后 |
+|---|---|---|
+| `pa$(touch /tmp/PWNED)ss` | **`/tmp/PWNED` 被创建**，落盘口令被污染成 `pass` | 未创建；落盘 `pa$(touch /tmp/PWNED)ss` |
+| `pa\`id\`ss` | 回显 `uid=0(root)` | 字面量保留 |
+| `p; touch /tmp/X; #` | 分号被引号吞掉，未执行（本例不触达） | 字面量保留 |
+
+注意第一行：注入**不仅执行了命令，还把落盘口令改成了 `$(...)` 的求值结果**——用户会
+拿到一个自己不知道的、被篡改的口令。
+
+**修复**：改为参数化。口令经单引号折叠后作为 `printf` 的位置参数传入：
+
+```kotlin
+internal fun shellQuoteForSingleLine(value: String): String =
+    "'" + value.replace("'", "'\\''") + "'"
+```
+
+单引号内除 `'` 外一切字符都是字面量；`'` 本身用收尾-转义-重开三段式 `'\''` 折叠。
+`buildWriteScript(password)` 与 `shellQuoteForSingleLine` 均提为**顶层 `internal`**，
+因为 `CcSwitchCredentials` 是 `internal object`、私有成员无法从单测触达，而这段拼接
+一旦回退就是命令注入。
+
+**反向验证**：忠实回退 `buildWriteScript` 到 `printf '%s' "$password"` 后，
+`CcSwitchCredentialsTest` **2/10 红**——恰为
+`write script never embeds the raw password into the command line`（守卫修复本身）与
+`write script executes the password as a literal under a real shell`（端到端），
+其余 8 例保持绿。恢复后 10/10 绿。
+
+**守卫自身的两次缺陷（记录在案）**：
+
+1. 首版测试只覆盖 `shellQuoteForSingleLine`，**不覆盖 `writeScript` 的调用点**。
+   回退调用点后测试全绿——守卫没钉住要防的东西。补救：把 `buildWriteScript` 提为顶层并直接断言其产物。
+2. 补上后首版断言用 `script.contains(hostile)` 判「裸值是否进入命令行」。但折叠结果
+   `'pa$(id)ss'` **同样包含**子串 `pa$(id)ss`，两种形态都为真，断言恒过。
+   改为**按结构判定**：定位 `printf` 行，取出 ` > ` 之前的实参，与
+   `shellQuoteForSingleLine(hostile)` 逐字符比对，并额外要求实参以单引号首尾包裹。
+
+### 行数棘轮
+
+`CcSwitchCredentials.kt` 128 → 159 行，仍远低于 400，**不入基线、不需同步**。
+
+### 其余判定为「未发现缺陷」的文件（含判断依据）
+
+- **`WebCredentialSection.kt`(105)**：从 `CcSwitchScreen` 抽出（注释：「这块的逻辑
+  （弱口令判定、复制反馈）自成一体，而 CcSwitchScreen 已远超行数棘轮」）；
+  界面只暴露「一键复制」与 `onRotatePassword`，**不暴露任意口令输入框**——这也是缺陷 #7
+  当下不可达的原因；`isKnownWeakPassword` 时显示 error 色但**不自动改**（注释：
+  「存量弱口令必须显式提示，但不能自动改——自动改会让用户当场失去访问权」）。
+- **`CcSwitchViewModel.resetWebPassword`**：`if (newPassword.isBlank()) return` 守卫
+  （注释：「传空下去会把用户锁在门外」）；成功后先 `_webPassword.value = newPassword`
+  再提示；`readWebCredentials` 直接委托 `CcSwitchCredentials.read`。
+- **`CcSwitchCredentials.read`**：拿不到口令时**如实返回空串**而非编造
+  （注释：「编造一个会让用户拿着不存在的口令去登录，并以为服务坏了」）；
+  `READ_SCRIPT` 失败兜底不留下空文件（`printf 'tx'` + `date +%s%s%s%s | md5sum | cut -c1-14`）；
+  所有文件 `chmod 600`；`SecureRandom` 而非 `kotlin.random.Random`
+  （注释：「后者在部分平台上会退化成 java.util.Random（固定种子的线性同余）」）；
+  `write` **刻意不提供默认参数**（注释：「过去 `resetWebPassword(newPassword: String = "admin123")`
+  让界面上那个『重置密码』按钮一键把口令打回弱口令，等于留了一条降级后门」）。
+- **`CcSwitchScreen.kt`**：第 935 行的 `OutlinedTextField` 属**代理版本升级对话框**
+  （`versionInput`，label「目标版本 (如 1.0.0，留空即最新)」），**不是**口令输入框。
+  `grep` 全仓确认 `resetWebPassword` 只有「定义 + rotate 调用」两处。
+
+### 测试
+
+`feature/settings` **+5**（`CcSwitchCredentialsTest` 5 → 10）。全项目见下节。
