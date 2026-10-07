@@ -107,6 +107,10 @@ step "静态校验：架构棘轮 + 星象不变量 + 社区坐标一致性 + �
 # 排序错一次就会把旧包推成 latest，且不抛异常、不留日志——只能靠测试拦。
 python3 ops/apkmanifest_test.py >/dev/null || die "apkmanifest 自测未通过"
 python3 ops/gen_manifest_test.py >/dev/null || die "清单生成自测未通过"
+# 产物洁净度守卫本身也要有自测：它是发布链路上唯一能拦住「发布包夹带开发工具」
+# 的关卡，若守卫的匹配模式被后续重构改坏，会静默放行坏包而不报错——
+# 这类"关卡本身失效"的缺陷只能靠自测发现，不能靠读代码。
+python3 ops/release_guard_test.py >/dev/null || die "发布产物守卫自测未通过"
 echo "运维脚本自测通过"
 
 step "构建 ${BUILD_VARIANT} APK"
@@ -137,6 +141,62 @@ echo "sha256: $APK_SHA"
 # 服务器端 gen-manifest.sh 独立复算一次；两者不一致说明传输或存储有问题，
 # 那时客户端按 sha256 校验下载必然失败。不等就中止，别发一个坏包。
 echo "${APK_SHA}  $(basename "$APK_PATH")" > "${APK_PATH}.sha256"
+
+step "校验产物洁净度：发布包不得夹带开发工具"
+# 这里查的是**产物本身**，不是配置文件。gradle.properties 写着 false
+# 不代表包里没有——v0.21.0 与 v0.21.1 两个内测包都实测带了 LeakCanary，
+# 桌面因此多出一个「Leaks」小鸟图标入口，且它在进程启动阶段自动初始化，
+# 是「打开即闪退」的高概率来源。配置会被人改错，产物不会说谎。
+#
+# 检查项：
+#   1. manifest 里不得有 LeakCanary 组件（LeakLauncherActivity 带来桌面图标）
+#   2. dex 里不得有 LeakCanary 类
+#   3. 不得声明与宿主同名的额外桌面入口
+AAPT2="${ANDROID_HOME:-/opt/android-sdk}/build-tools/37.0.0/aapt2"
+[[ -x "$AAPT2" ]] || AAPT2=$(ls -d "${ANDROID_HOME:-/opt/android-sdk}"/build-tools/*/aapt2 2>/dev/null | sort -V | tail -1)
+MANIFEST_XML="$("$AAPT2" dump xmltree "$APK_PATH" --file AndroidManifest.xml 2>/dev/null)"
+
+LEAK_COMPONENTS="$(printf '%s' "$MANIFEST_XML" \
+  | grep -oE 'leakcanary\.[A-Za-z.]*|LeakLauncherActivity|LeakActivity|PlumberInstaller|MainProcessAppWatcherInstaller' \
+  | sort -u || true)"
+if [[ -n "$LEAK_COMPONENTS" ]]; then
+  printf '\033[1;31m发布包夹带了 LeakCanary，已中止发布。命中组件：\033[0m\n'
+  printf '  %s\n' "$LEAK_COMPONENTS"
+  cat <<'EOF'
+
+原因：LeakCanary 是开发工具，不该出现在给用户安装的包里。
+  1. 它注册了带 LAUNCHER 的 LeakLauncherActivity，用户桌面会多出一个
+     「Leaks」小鸟图标应用——内测用户不是开发者，只会当成多余 App；
+  2. 它靠 manifest ContentProvider（PlumberInstaller /
+     MainProcessAppWatcherInstaller）在 attachBaseContext 阶段自动初始化，
+     并注册自己的 ComponentCallbacks2 与独立分析进程，与宿主 Application
+     实现的 WorkManager Configuration.Provider 存在冲突面，
+     是「打开即闪退」的高概率来源。
+
+修法：把 gradle.properties 的 tianxuan.leakcanary 置为 false
+     （默认值已是 false），再重新构建。
+     排障请用 debug 包或应用内崩溃报告，不要在发布包里开它。
+EOF
+  exit 1
+fi
+
+DEX_LEAK=""
+TMP_DEX_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DEX_DIR"' EXIT
+unzip -o -q "$APK_PATH" 'classes*.dex' -d "$TMP_DEX_DIR" 2>/dev/null || true
+for dex in "$TMP_DEX_DIR"/*.dex; do
+  [[ -f "$dex" ]] || continue
+  if strings "$dex" 2>/dev/null | grep -q "Lcom/squareup/leakcanary/"; then
+    DEX_LEAK="$(basename "$dex")"
+    break
+  fi
+done
+if [[ -n "$DEX_LEAK" ]]; then
+  printf '\033[1;31m发布包的 %s 中含 LeakCanary 类，已中止发布。\033[0m\n' "$DEX_LEAK"
+  echo "请确认 tianxuan.leakcanary=false 后重新构建。"
+  exit 1
+fi
+echo "产物洁净度通过：无 LeakCanary 组件、无 LeakCanary 类"
 
 step "推送源码与 tag"
 if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then

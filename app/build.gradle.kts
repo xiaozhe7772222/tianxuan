@@ -33,11 +33,29 @@ val tianxuanMinify: Boolean = providers.gradleProperty("tianxuan.minify")
     .orNull?.trim()?.toBooleanStrictOrNull()
     ?: false
 
-// release 变体是否带 LeakCanary。内测期 true，正式对外发布前应置 false——
-// 它会在应用内弹窗展示泄漏堆栈，属于开发工具，不该出现在用户手机上。
+// release 变体是否带 LeakCanary。默认 false，**不要因为「内测期需要排障」而默认打开**。
+//
+// 它是开发工具，装进给用户用的包会有三个直接后果（都不是理论风险，v0.21.0/v0.21.1 都实测到了）：
+//
+// 1. 桌面上多出一个「Leaks」小鸟图标应用。LeakCanary 通过自己注册的
+//    LeakLauncherActivity 声明了 LAUNCHER intent-filter，用户点开它会启动
+//    天玄进程。这是给开发者用的入口，不该出现在内测用户手机上——
+//    内测群里的用户不是开发者，他们只会当成一个多余的 App。
+// 2. 它靠 manifest 里的 ContentProvider（PlumberInstaller /
+//    MainProcessAppWatcherInstaller）在 attachBaseContext 阶段自动初始化，
+//    且会注册自己的 ComponentCallbacks2 与独立分析进程，
+//    与宿主的 Application 初始化顺序、WorkManager Configuration.Provider
+//    都存在冲突面——这是 release 包启动即闪退的高概率来源之一。
+// 3. 每次泄漏都会 dump hprof 并解析，几十 MB 写入 + 强制 GC，
+//    在平板上会明显卡顿，用户会归因为「天玄太耗电/太卡」。
+//
+// 真要在 release 包里排障，正确做法不是把 LeakCanary 打开，而是：
+// 用 debug 包（带 .debug 后缀）复现后看报告；或看天玄自研的 crashReporter
+// 与 logcat。release 包应保持干净。需要临时开启时用
+// -Ptianxuan.leakcanary=true 构建，**不要改这里的默认值**。
 val tianxuanLeakCanary: Boolean = providers.gradleProperty("tianxuan.leakcanary")
     .orNull?.trim()?.toBooleanStrictOrNull()
-    ?: true
+    ?: false
 
 // TianXuanDev 双包构建开关：CI（.github/workflows/tianxuandev-build.yml）设 TIANXUAN_DEV_BUILD=1 时，
 // 产出独立预览包 top.wkbin.tianxuan.dev / 应用名 TianXuanDev / 版本后缀 -dev，
@@ -256,6 +274,18 @@ dependencies {
     testImplementation(libs.androidx.work.testing)
     // Robolectric on Java 25 requires the same ASM override as core:database.
     testImplementation(libs.bundles.asm.test)
+
+    // ReleasePackageCleanlinessTest 直接读 gradle.properties 做断言，但 .properties
+    // 不是 Kotlin 源文件，Gradle 不认为它是 testDebugUnitTest 的输入。
+    // 于是改完 tianxuan.leakcanary 再跑测试，任务被判为 UP-TO-DATE 并复用旧结果——
+    // 明明配置已改坏，8 项守卫依然全绿（实测踩过：改回 true 后仍是 BUILD SUCCESSFUL，
+    // 读结果 XML 才发现文件时间戳还是改动前那次）。
+    // 声明它为输入，配置一变就强制重跑，守卫才是真的。
+    tasks.withType<Test>().configureEach {
+        inputs.file(rootProject.file("gradle.properties"))
+            .withPropertyName("gradleProperties")
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    }
 }
 
 val bundledProot = layout.projectDirectory.file(
