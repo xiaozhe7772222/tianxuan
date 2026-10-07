@@ -1064,3 +1064,143 @@ Kotlin 字符串 `==` 逐字符比较并在**首个不同字符处提前返回**
 
 `runtime` **131 → 143**（新增 `PinVerifierTest` 7 例 + `WebChatAssetsTest` 5 例），
 全项目 `1450 tests, 0 failures, 0 errors`。
+
+## 复核批次七：tools 模块 41 个 main 文件全量精读（2026-10-07）
+
+精读范围：`tools/src/main` 下全部 **41** 个 `.kt`（`core/tools` 35 + `runtime/tools` 5 + `di/tools` 1），
+逐文件读完，不跳读、不猜测。发现 **3 处真实缺陷**（均已修复并反向验证），
+其余 38 个文件判为「未发现缺陷」。
+
+### 缺陷 #4（已修）：`manifest.version` 未做字符白名单 → 本地插件任意路径写入
+
+**位置**：`core/tools/ToolManifestValidator.kt` + `core/tools/ToolRegistry.kt:importLocal`
+
+**成因**：`validateAll` 对 `manifest.version` 只做 `isNotBlank()`。而
+`ToolRegistry.importLocal` 用它直接拼落盘路径：
+
+```kotlin
+val versionDir = File(localRoot, "${manifest.id}/${manifest.version}")
+```
+
+`id` 有 `idPattern = Regex("[a-z0-9][a-z0-9-]{1,63}")` 全锚定白名单，`version` 没有。
+于是版本号填 `"../../../shared_prefs/x"` 时，`File` 归一化后写到了 `files/plugins` **之外**。
+
+**放大条件**：`importLocal` 的「同版本覆盖」分支会先
+`versionDir.renameTo(legacy)` 把已存在的目标整体搬走，写入后再 `legacy.deleteRecursively()`。
+当 `versionDir` 逃逸到应用私有目录中的敏感路径时，这就从「越权写入」升级为
+**「先搬走、再写入、最后删除原物」的任意覆盖/删除原语**。
+
+**修复**（两层，白名单 + 纵深防御）：
+
+1. `ToolManifestValidator` 新增 `versionPattern = Regex("[A-Za-z0-9][A-Za-z0-9._+-]{0,63}")`，
+   对 `version` 与 `latestVersion` 做**全锚定**匹配。该白名单覆盖 `1.2.0`、`1.2.0-beta.1`、
+   `v2`、`2025.10.07`、`1.0.0+build.42` 等常见写法，不误伤。
+2. `importLocal` 落盘前再加一次规范化包含性检查：
+   `versionDir.canonicalFile.toPath().startsWith(localRoot.canonicalFile.toPath())`，
+   保证「校验层被绕过时仍有第二道闸」。
+
+### 缺陷 #5（已修）：`maxByOrNull { it.name }` 用字典序挑版本 → 静默取旧 payload
+
+**位置**：`core/tools/ToolRegistry.kt:loadLocalManifests`
+
+**成因**：在 `plugins/<id>/<version>/` 的候选目录里用 `it.name` 的 `Comparable` 取最大，
+而 `String` 是**字典序**：
+
+```
+max("1.9.0", "1.10.0") == "1.9.0"     // 错，应为 1.10.0
+max("1.9.0", "1.11.0") == "1.9.0"     // 错，应为 1.11.0
+```
+
+**后果是静默的**：用户导入并成功安装了 1.10.0，`localPayloadRoot()` 仍指向 1.9.0 的
+payload 目录，装出来的永远是旧内容，**不报任何错误**。这类「没报错所以以为没问题」
+的缺陷只能靠版本比较本身的正反向断言兜住。
+
+**修复**：改为读取每个候选目录的 `manifest.json` 声明版本，用新增的顶层函数
+`compareToolVersions` 做**数值化优先**比较（`\d+(\.\d+){0,3}` 逐段比，段数不足补 0），
+数字段全等即返回 0；仅当任一侧完全提取不到数字时才退化为字典序兜底。
+提取为顶层 `internal` 函数是为了不构造 `ToolRegistry`（需真实 `Context`）即可做单元回归。
+
+### 缺陷 #6（已修）：同包两条路径对「重复 manifest.json」判定不一致
+
+**位置**：`core/tools/ToolRegistry.kt:importLocal`
+
+**成因**：`inspectSeekableManifest` 有
+`require(manifestEntry == null) { "插件包包含重复的 manifest.json" }`，
+但真正落盘的 `importLocal` **没有**这道检查，而是
+`if (name == "manifest.json") manifestText = target.readText()` ——静默采用**最后一个**。
+
+**后果**：同一个 ZIP 在「预览」与「导入」两条路径给出不同结论。攻击者可以把
+**通过校验的 manifest 放在前面**充当用户看到的预览，把**真正生效的放在后面**，
+预览所见与最终导入的清单不是同一份。
+
+**修复**：`importLocal` 增加同一判定——
+`if (name == "manifest.json") { require(manifestText == null) { "插件包包含重复的 manifest.json" } }`，
+两条路径必须同一结论。
+
+### 反向验证（守卫自身必须能被证伪）
+
+| 测试 | 回退修复后 | 恢复修复后 |
+| --- | --- | --- |
+| `ToolManifestVersionPatternTest`（4 例） | **3 红** | 4 绿 |
+| `ToolVersionOrderingTest`（5 例） | **4 红** | 5 绿 |
+
+回退方式：把 `versionPattern` 两处 `require` 删除、把 `compareToolVersions` 忠实改回
+`left.compareTo(right)`、删掉 `canonicalLocalRoot` 检查。删掉版本白名单后
+`rejectsPathTraversalVersions` / `rejectsAbsoluteAndSeparatorVersions` /
+`rejectsUnsafeLatestVersion` 三条立即转红；纯字典序下
+`numericSegmentsBeatLexicographicOrder` / `picksHighestVersionFromCandidateDirectories` /
+`missingSegmentsCompareAsZero` / `prefixesAndSuffixesDoNotBreakNumericOrdering` 四条立即转红。
+
+> 教训记录：第一次回退时只删了 `return 0`（保留了数值比较），结果 5 例只红 1 例。
+> 说明「反向验证必须忠实还原修复前实现」，否则守卫的强度会被高估——
+> 数值比较本身才是这次修复的核心，只回退「平局处理」自然证不伪。
+
+### 行数棘轮（上调 ToolRegistry，附理由）
+
+`ToolRegistry.kt` 445 → **504**（基线同步至 504）。
+净增 59 行全部是新增防御与注释：`compareToolVersions` 顶层函数 + 版本目录选择的
+数值化比较 + `canonicalLocalRoot` 纵深防御 + 重复 manifest 一致性检查 + 逐条解释成因的注释。
+本次为**上调**而非下调，理由已在上文逐条说明；`ToolManifestValidator.kt` 92 行，
+低于 400 上限，不进基线。
+
+### 其余 38 个文件判为「未发现缺陷」（含判断依据）
+
+- **`ToolManager.kt`(1125)**：`installJobs` 为 `ConcurrentHashMap` 且登记用
+  `putIfAbsent`、注销用**两参原子 `remove(key, value)`**（注释明写「写成
+  `if (installJobs[id] === job) remove(id)` 会在两条语句之间被新任务占据同一 key，
+  把新任务从表里抹掉，取消安装将再也找不到它」）；`uninstall` 必须用
+  `containsKey`（注释明写「ConcurrentHashMap 覆写了 contains，使其等价于
+  containsValue，写成 `toolId !in installJobs` 会去比对全部 Job 值，永远为真，
+  这道闸门等于不存在」）；`Completed` 分支**先 commit 再落库**，注释完整论证了
+  反过来会在进程被杀窗口期内造成「磁盘回旧版却永不提示更新、无法自愈」。
+- **`RuntimeManager.kt`(245)**：`installMutex` 串行化全部 apt 事务；装前先
+  `rm -rf /var/lib/dpkg/updates/* /var/lib/dpkg/lock*` + `dpkg --configure -a` 自愈上次
+  被强杀留下的「已解包未配置」状态；`versionSatisfies` 支持 `>=`/`>`/`=` 前缀。
+- **`SkillPackageParser.kt`(339)**：ZIP 与目录两条路径**共享同一组上限**
+  （注释明写「目录来源不受信任程度相同，无上限的 walkTopDown + readBytes 会在超大目录上
+  直接 OOM」）；逐块读取时同时扣减单文件与总配额，到顶后再 `zip.read()` 探一次以区分
+  「刚好到顶」与「超出」（防「恰好等于上限」的合法包被误杀）；`sanitizeSkillId` 拒绝
+  全下划线结果；`sanitizeSkillId(fallbackId)` 失败时回退随机 id 而不阻断解析。
+- **`SkillPackageInspector.kt`(418)**：5 维静态审计（结构 / ELF 与危险扩展名 /
+  Prompt 注入与越狱 / 破坏性命令与反弹 Shell / 敏感文件嗅探），
+  `reportMatches` 每模式限 3 条防刷屏；`OBFUSCATION_HINT_PATTERNS` 明确定性为
+  WARNING 级人工复核（注释：「黑名单无法穷举」）。
+- **`ClawHubClient.kt`(415)**：`lastCatalogUsedOfflineFallback` 用 `@Volatile`；
+  下载用 `BoundedStreamCopy` + `OverflowPolicy.ABORT`；`contentLength()` 超限先拒；
+  离线精选包由内置模板动态生成标准 ZIP。
+- **`LocalPluginPayloadManager.kt`(118)**：`require(target.canonicalFile.toPath()
+  .startsWith(canonicalRoot.toPath()))` 防工具 ID 逃逸；逐文件复制并保证
+  `copiedBytes == totalBytes` 时必报一次进度；`normalizeShellScript` 去 BOM + CRLF→LF +
+  补 shebang（注释：「Windows-created ZIPs commonly carry BOM/CRLF and no executable bit」）。
+- **`RuntimeManager` / `ToolNotificationNotifier.kt`(264)**：`stageApkForInstall` 复制后
+  `check(staged.length() == apk.length())` 校验完整性，并清理 24 小时前的旧暂存；
+  `showBuildSuccess` 先 `cancel` 再 `notify`（注释：「Some Android/OEM notification
+  managers keep the previous ongoing notification row when it is changed in-place to a
+  non-ongoing one」）。
+- **`di/tools/KoinModule.kt`(168)**：`SkillCompatibilityEvaluator(toolRegistry = getOrNull())`
+  用 `getOrNull` 容忍 ToolRegistry 缺失；依赖图无环。
+
+### 测试
+
+`tools` **+5**（新增 `ToolVersionOrderingTest`）、`app` **+4**
+（新增 `ToolManifestVersionPatternTest`）。全项目 `1089 tests, 0 failures, 0 errors`（`architectureCheck` 绿）。

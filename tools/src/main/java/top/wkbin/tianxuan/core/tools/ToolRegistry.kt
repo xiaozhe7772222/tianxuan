@@ -265,6 +265,14 @@ class ToolRegistry(
                             "插件包只允许 manifest.json 与 payload/：$name"
                         }
                         if (entry.isDirectory) continue
+                        // 与 inspectLocal/inspectSeekableManifest 保持一致：重复的
+                        // manifest.json 直接拒绝。此前预览阶段会拒绝、实际导入阶段却
+                        // 静默采用最后一个条目——同一个 ZIP 两条路径给出不同结论，
+                        // 攻击者可以把「通过校验的 manifest」放在前面充当预览，
+                        // 把真正生效的放在后面。两条路径必须同一判定。
+                        if (name == "manifest.json") {
+                            require(manifestText == null) { "插件包包含重复的 manifest.json" }
+                        }
                         val target = File(staging, name)
                         target.parentFile?.mkdirs()
                         target.outputStream().use { output ->
@@ -289,6 +297,14 @@ class ToolRegistry(
             ToolManifestValidator.validateAll(listOf(manifest))
             onProgress(LocalPluginImportProgress(totalBytes ?: bytes, totalBytes, "正在保存插件"))
             val versionDir = File(localRoot, "${manifest.id}/${manifest.version}")
+            // 纵深防御：ToolManifestValidator 已用白名单拒绝含 "/"、".." 的版本号，
+            // 但落盘前仍做一次规范化包含性检查。versionDir 一旦逃出 localRoot，
+            // 下面的「同版本覆盖」分支会先 renameTo 搬走目标、写入后再 deleteRecursively，
+            // 等于给了攻击者一个对应用私有目录的任意覆盖写原语。
+            val canonicalLocalRoot = localRoot.canonicalFile.toPath()
+            require(versionDir.canonicalFile.toPath().startsWith(canonicalLocalRoot)) {
+                "本地插件安装路径逃逸：${manifest.id}/${manifest.version}"
+            }
             versionDir.parentFile?.mkdirs()
             // 同版本覆盖导入：离线包作者经常在不 bump 版本号的情况下重新打包
             // （修复安装脚本等）。旧逻辑直接拒绝，导致用户被“已导入，无需重复
@@ -332,15 +348,31 @@ class ToolRegistry(
     private fun loadLocalManifests(): List<ToolManifest> {
         if (!localRoot.isDirectory) return emptyList()
         return localRoot.listFiles().orEmpty().mapNotNull { idDir ->
-            idDir.listFiles().orEmpty().filter { it.isDirectory }.maxByOrNull { it.name }
-                ?.let { versionDir ->
-                    runCatching {
+            // 不能用 maxByOrNull { it.name }：那是**字典序**比较，"1.9.0" > "1.10.0"，
+            // 于是导入 1.10.0 之后仍然会加载 1.9.0 的 manifest，向用户提供一个已过期的
+            // payload（同 id 多版本共存时 payload 目录也随之取旧）。改为按声明版本号做
+            // 数值化比较，并对无法解析的版本回落到字典序保证选择稳定、不抛异常。
+            idDir.listFiles().orEmpty()
+                .filter { it.isDirectory }
+                .mapNotNull { versionDir ->
+                    val manifest = runCatching {
                         json.decodeFromString<ToolManifest>(File(versionDir, "manifest.json").readText())
                             .copy(source = "LOCAL", offlineOnly = true, installMethod = "LOCAL_PACKAGE")
-                    }.getOrNull()
+                    }.getOrNull() ?: return@mapNotNull null
+                    versionDir to manifest
                 }
+                .maxWithOrNull { a, b -> compareVersionStrings(a.second.version, b.second.version) }
+                ?.second
         }.let { runCatching { ToolManifestValidator.validateAll(it) }.getOrDefault(emptyList()) }
     }
+
+    /**
+     * 数值化版本比较：先按 `\d+(\.\d+){0,3}` 提取数字段逐位比较，段数不足补 0，
+     * 完全相等时再用原始串做字典序比较以提供确定性的全序。
+     * 两侧都无法提取数字时退化为纯字典序，绝不抛异常。
+     */
+    private fun compareVersionStrings(left: String, right: String): Int =
+        compareToolVersions(left, right)
 
     private fun download(url: String): ByteArray {
         val response = httpClient.newCall(Request.Builder().url(url).build()).execute()
@@ -442,4 +474,31 @@ class ToolRegistry(
 
     private val localRoot: File
         get() = File(context.filesDir, "plugins")
+}
+
+private val VERSION_NUMBERS = Regex("\\d+(?:\\.\\d+){0,3}")
+
+/**
+ * 工具版本号比较（数值化优先，字典序兜底）。
+ *
+ * 单独提成顶层函数是为了能在不构造 [ToolRegistry]（需要真实 Android [Context]）的前提下
+ * 做单元回归：字典序比较会把 `"1.9.0"` 判为大于 `"1.10.0"`，从而让本地插件始终加载过期的
+ * 那一个版本目录。
+ *
+ * 注意：**数字段全等即返回 0**，不再回落到字典序。否则 `"1.0"` 与 `"1.0.0"` 会因原串
+ * 不同被判为不相等，`maxWithOrNull` 的选择结果将依赖目录枚举顺序而不确定。
+ * 只有在**任一侧完全提取不到数字**时才退化为字典序，保证全序且绝不抛异常。
+ */
+internal fun compareToolVersions(left: String, right: String): Int {
+    val leftNums = VERSION_NUMBERS.find(left)?.value?.split('.')?.mapNotNull { it.toIntOrNull() }
+    val rightNums = VERSION_NUMBERS.find(right)?.value?.split('.')?.mapNotNull { it.toIntOrNull() }
+    val numeric = leftNums != null && rightNums != null && leftNums.isNotEmpty() && rightNums.isNotEmpty()
+    if (numeric) {
+        for (index in 0 until maxOf(leftNums.size, rightNums.size)) {
+            val difference = leftNums.getOrElse(index) { 0 } - rightNums.getOrElse(index) { 0 }
+            if (difference != 0) return difference
+        }
+        return 0
+    }
+    return left.compareTo(right)
 }
