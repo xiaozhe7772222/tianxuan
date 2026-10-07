@@ -1297,3 +1297,113 @@ internal fun shellQuoteForSingleLine(value: String): String =
 ### 测试
 
 `feature/settings` **+5**（`CcSwitchCredentialsTest` 5 → 10）。全项目见下节。
+
+---
+
+## 缺陷 #8（已修）：剪贴板复制路径散落 14 处，其中 12 处丢失「剪贴板不可用」兜底
+
+**位置**：`feature/settings` 模块内 7 个文件。
+
+**成因**：`ClipboardSupport.kt` 的类注释把公共函数的存在理由写得很清楚：
+
+> 此前这段在 CcSwitchScreen / FtpSettingsScreen / SshSettingsScreen 各抄了一份，
+> 差别只在剪贴板标签……抄三份的直接代价是：改提示文案或换剪贴板标签时要改三处，
+> 漏一处就出现行为不一致的复制按钮，而这类差异只在用户点击时才发现。
+
+但实际排查发现**仍有 12 处手抄**，且形态全部退化为
+`clipboard?.setPrimaryClip(...)` 之后**无条件**弹「已复制」：
+
+| 文件 | 位置 | 复制内容 |
+|---|---|---|
+| `McpSettingsScreen.kt` | 664 | **`mcp_agent_token`** |
+| `McpSettingsScreen.kt` | 732 / 969 / 995 | Agent 地址 / 命令 / JSON 配置 |
+| `SettingsCommon.kt` | 241 / 263 / 274 | 智枢协作地址 / **PIN 配对码** / 带 token 直连地址 |
+| `ModelProfilesScreen.kt` | 723 | 模型 JSON 配置（含 API Key） |
+| `ToolCenterScreen.kt` | 723 / 783 | 工具日志 / 捆绑安装日志 |
+| `SponsorScreen.kt` | 383 | 赞助邮箱 |
+| `SystemDevSettingsScreen.kt` | 486 | ADB 命令 |
+| `ToolDetailScreen.kt` | 273 / 238 | 带 token 访问链接 / 服务日志（本轮已先修） |
+
+两种退化形态都造成用户可见后果：
+
+- **`clipboard?.` 形式**（10 处）：拿不到剪贴板服务时静默跳过写入，却仍然弹出
+  「已复制」。用户在粘贴处找不到内容，只能反复排查——而复制内容里包含
+  **MCP token、PIN 配对码、带 token 的直连 URL**，这类「以为复制了其实没有」
+  会直接卡住配对流程。
+- **`as ClipboardManager` 强转形式**（`SettingsCommon.kt` 三处）：
+  服务为 null 时**抛 NPE 崩溃**，而不是静默失败。
+
+**修复**：全部收敛到 `copyToClipboard(context, text, label, toast)`
+（`ClipboardSupport.kt`，内建 null 分支与「系统剪贴板不可用」提示）。
+同时删除 `CommunityLinks.kt` 里一个**与公共函数同名不同签名**的私有重载
+`Context.copyToClipboard(label, text)` —— 同一仓库出现两套同名实现，
+读代码的人无法从调用点判断走的是哪一套。
+
+**守卫与反向验证**：新增 `ClipboardUnificationTest`（3 例，源码级扫描）：
+
+1. 模块内不得出现绕过公共函数的 `setPrimaryClip` 直呼；
+2. 模块内不得重新定义私有 `copyToClipboard` 重载；
+3. 公共实现自身必须保留 null 分支**且分支内真的有提示**。
+
+反向验证两轮：
+
+| 回退动作 | 变红的守卫 |
+|---|---|
+| `SponsorScreen` 恢复直呼 `setPrimaryClip` | 第 1 条 |
+| 公共函数 null 分支退化为 `if (clipboard == null) return` | 第 3 条 |
+
+第 2 条两轮均保持绿，证明它测的是独立不变量、未被误伤。
+
+**守卫自身的三次缺陷（记录在案）**：第 3 条守卫的判定方式连续错了两次，
+两次都是**子串判定无法区分「已修复」与「已退化」**：
+
+1. 首版 `text.contains("clipboard == null")`：退化后的
+   `if (clipboard == null) return` 同样含该子串，两种形态都为真 → 恒过。
+2. 改为截取 `guardIndex` 后 **300 字符**窗口并要求含 `Toast.makeText`：
+   窗口长度经验值，恰好把后续成功路径上的
+   `Toast.makeText(context, toast, ...)` 纳入 → 仍恒过。
+3. 最终改为**按行取该 `if` 的直属分支**，并单独处理
+   「单行 `if (cond) return`」形态（无分支体，直接判失败）。
+
+教训与批次七缺陷 #4 的守卫缺陷同源：**凡是要区分「某结构存在/不存在」的断言，
+必须按语法结构判定，不能做子串匹配，也不能用固定长度窗口。**
+
+### 行数棘轮
+
+`ToolDetailScreen.kt` 与 `CommunityLinks.kt` 均为**净减少**（删除重复实现与冗余导入），
+`SponsorScreen.kt` / `McpSettingsScreen.kt` / `SettingsCommon.kt` 等为净减少或持平。
+全部文件 61 个均低于 400（其中 `McpSettingsScreen.kt` 仍远超 400 但**在基线内**，
+本轮只减不增，棘轮不下调要求）。`CcSwitchCredentials.kt` 159 行，不入基线。
+
+### 本轮判定为「未发现缺陷」的文件（含判断依据）
+
+- **`di/feature/settings/KoinModule.kt`(142)**：`SponsorListRepository` 与
+  `StatsRepository` 用 `single`（无状态、可复用），其余全部 `viewModel`；
+  `SettingsViewModel` 对可选依赖用 `getOrNull()`
+  （`skillInstallationManager`、`clawHubClient`）容忍缺失；依赖图无环。
+- **`stats/StatsRepository.kt`(253)**：**关键 OOM 修复已在位**——注释详述原实现
+  `listEntriesInRange` 把区间内全部 `harness_entries`（含完整 `payloadJson`）
+  读进内存再逐条 `parseToJsonElement` 建树，实测库内 15,888 条、单体可达数 MB，
+  选「全部时间」直接打爆 256MB 堆。现改为 SQL 层 `json_extract` + `GROUP BY`
+  聚合，1.5 万行压成几十行小结果。`tzOffsetMs` 与 SQL 日切共用同一偏移
+  （注释：「避免 CAST(createdAt/86400000) 按 UTC 日切、本地午夜错桶」）。
+  `tokenContributionFromAggregate` / `estimateTokensFromChars` 已提为顶层
+  `internal` 可测；热力图用 `groupingBy{}.fold(0)` 单遍聚合，不加载原始条目。
+- **`stats/StatsViewModel.kt`(74)**：`catch (e: CancellationException) { throw e }`
+  保取消语义后才 `catch (Exception)`；错误态给出可重试文案。
+- **`ToolDetailViewModel.kt`(365)**：`pollGatewayStatus` 的 `while(true)` 挂在
+  `viewModelScope` 上，VM 清理即取消；轮询回写前用 `_toolId.value == currentId`
+  判代，避免切换工具后旧轮询覆盖新状态；`toggleAutoStart` 保存失败**上抛 UI**
+  （注释：「保存失败必须上抛 UI，避免 Switch 显示『假成功』」）；
+  `generateToken` 用 `UUID.randomUUID()`（`SecureRandom` 支撑，加密安全）；
+  `applyModel` 对 token/密钥仅在有值时才写入，不覆盖已有配置。
+- **`StorageUsageViewModel.kt`(255)**：六处清理动作共享同一防重入守卫
+  `if (cleaningAction != null || refreshing) return`；每处
+  `if (it is CancellationException) throw it`；`formatSize` 用 `Locale.US`
+  固定小数点（避免阿拉伯语等区域出现 `١٢٣،٤`）。
+- **`ClipboardSupport.kt`(30)**：见缺陷 #8。
+
+### 测试
+
+`feature/settings` **+3**（新增 `ClipboardUnificationTest`），加上缺陷 #7 的
+`CcSwitchCredentialsTest` 5 → 10。`feature/settings` 由 6 个测试文件增至 7 个。

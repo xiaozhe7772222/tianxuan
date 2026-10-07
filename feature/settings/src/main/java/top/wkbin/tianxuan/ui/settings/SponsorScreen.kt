@@ -379,9 +379,7 @@ private fun sendSponsorEmail(context: Context) {
     runCatching {
         context.startActivity(intent)
     }.onFailure {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        clipboard?.setPrimaryClip(ClipData.newPlainText("天玄赞助邮箱", SPONSOR_EMAIL))
-        Toast.makeText(context, "已复制赞助邮箱：$SPONSOR_EMAIL，请打开邮箱写信", Toast.LENGTH_LONG).show()
+        copyToClipboard(context, SPONSOR_EMAIL, "天玄赞助邮箱", "已复制赞助邮箱：$SPONSOR_EMAIL，请打开邮箱写信")
     }
 }
 

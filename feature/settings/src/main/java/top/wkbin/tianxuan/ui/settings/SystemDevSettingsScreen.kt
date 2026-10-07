@@ -482,9 +482,7 @@ private fun PhantomProcessLimitDialog(
                         )
                         OutlinedButton(
                             onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                clipboard?.setPrimaryClip(ClipData.newPlainText("Android 12 子进程限制命令", adbCommand))
-                                Toast.makeText(context, "命令已复制", Toast.LENGTH_SHORT).show()
+                                copyToClipboard(context, adbCommand, "Android 12 子进程限制命令", "命令已复制")
                             },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(8.dp),

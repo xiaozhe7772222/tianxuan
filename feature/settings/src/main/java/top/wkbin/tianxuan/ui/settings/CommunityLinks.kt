@@ -1,11 +1,8 @@
 package top.wkbin.tianxuan.ui.settings
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.widget.Toast
 import top.wkbin.tianxuan.core.model.Community
 
 /** 打开外部链接；无可用浏览器时复制到剪贴板，别让入口变成死路。 */
@@ -16,8 +13,11 @@ internal fun openBrowser(context: Context, url: String) {
         }
         context.startActivity(intent)
     }.onFailure {
-        context.copyToClipboard("URL", url)
-        Toast.makeText(context, "已复制链接：$url", Toast.LENGTH_LONG).show()
+        // 走 ClipboardSupport 的统一实现（含「剪贴板不可用」兜底）。
+        // 本文件原有一个同名私有 `Context.copyToClipboard(label, text)` 重载，
+        // 与公共函数同名不同签名且静默吞掉失败——同一仓库出现两套行为不一致的
+        // 同名实现，正是 ClipboardSupport 注释里要消除的重复。
+        copyToClipboard(context, url, "URL", "已复制链接：$url")
     }
 }
 
@@ -30,16 +30,11 @@ internal fun joinQqGroup(context: Context) {
     runCatching {
         context.startActivity(intent)
     }.onFailure {
-        context.copyToClipboard("天玄官方交流群", Community.QQ_GROUP_ID)
-        Toast.makeText(
+        copyToClipboard(
             context,
+            Community.QQ_GROUP_ID,
+            "天玄官方交流群",
             "已复制 QQ 群号：${Community.QQ_GROUP_ID}，可打开 QQ 搜索加入",
-            Toast.LENGTH_LONG,
-        ).show()
+        )
     }
-}
-
-private fun Context.copyToClipboard(label: String, text: String) {
-    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-    clipboard?.setPrimaryClip(ClipData.newPlainText(label, text))
 }

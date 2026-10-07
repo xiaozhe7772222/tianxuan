@@ -660,9 +660,7 @@ private fun AgentServerCard(state: AgentServerState, viewModel: SettingsViewMode
                                 )
                                 IconButton(
                                     onClick = {
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                        clipboard?.setPrimaryClip(ClipData.newPlainText("mcp_agent_token", state.token))
-                                        Toast.makeText(context, "令牌已复制", Toast.LENGTH_SHORT).show()
+                                        copyToClipboard(context, state.token, "mcp_agent_token", "令牌已复制")
                                     },
                                     enabled = state.token.isNotBlank(),
                                     modifier = Modifier.size(24.dp),
@@ -728,9 +726,7 @@ private fun CopyableLine(label: String, value: String, context: Context) {
         )
         IconButton(
             onClick = {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                clipboard?.setPrimaryClip(ClipData.newPlainText("mcp_agent_url", value))
-                Toast.makeText(context, "地址已复制", Toast.LENGTH_SHORT).show()
+                copyToClipboard(context, value, "mcp_agent_url", "地址已复制")
             },
             modifier = Modifier.size(24.dp),
         ) {
@@ -965,9 +961,7 @@ private fun McpServerDetailDialog(
                             )
                             IconButton(
                                 onClick = {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                    clipboard?.setPrimaryClip(ClipData.newPlainText("mcp_cmd", cmdText))
-                                    Toast.makeText(context, "命令已复制", Toast.LENGTH_SHORT).show()
+                                    copyToClipboard(context, cmdText, "mcp_cmd", "命令已复制")
                                 },
                                 modifier = Modifier.size(24.dp),
                             ) {
@@ -991,9 +985,7 @@ private fun McpServerDetailDialog(
                         )
                         TextButton(
                             onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                clipboard?.setPrimaryClip(ClipData.newPlainText("mcp_json", jsonConfig))
-                                Toast.makeText(context, "JSON 配置已复制", Toast.LENGTH_SHORT).show()
+                                copyToClipboard(context, jsonConfig, "mcp_json", "JSON 配置已复制")
                             },
                             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                         ) {

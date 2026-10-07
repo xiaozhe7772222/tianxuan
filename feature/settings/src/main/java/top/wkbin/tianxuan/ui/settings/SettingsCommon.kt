@@ -237,9 +237,7 @@ fun WebChatBridgeDialog(
                                     )
                                     TextButton(
                                         onClick = {
-                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                            clipboard.setPrimaryClip(ClipData.newPlainText("天玄智枢协作地址", status.accessUrl))
-                                            Toast.makeText(context, "已复制基础链接", Toast.LENGTH_SHORT).show()
+                                            copyToClipboard(context, status.accessUrl, "天玄智枢协作地址", "已复制基础链接")
                                         }
                                     ) { Text("复制") }
                                 }
@@ -259,9 +257,7 @@ fun WebChatBridgeDialog(
                                     )
                                     TextButton(
                                         onClick = {
-                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                            clipboard.setPrimaryClip(ClipData.newPlainText("PIN", status.pinCode))
-                                            Toast.makeText(context, "已复制配对码", Toast.LENGTH_SHORT).show()
+                                            copyToClipboard(context, status.pinCode, "PIN", "已复制配对码")
                                         }
                                     ) { Text("复制") }
                                 }
@@ -270,9 +266,12 @@ fun WebChatBridgeDialog(
                             val directUrl = "${status.accessUrl}?token=${status.pinCode}"
                             Button(
                                 onClick = {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    clipboard.setPrimaryClip(ClipData.newPlainText("天玄智枢直连地址", directUrl))
-                                    Toast.makeText(context, "已复制免密直达链接，在电脑浏览器打开即可！", Toast.LENGTH_SHORT).show()
+                                    copyToClipboard(
+                                        context,
+                                        directUrl,
+                                        "天玄智枢直连地址",
+                                        "已复制免密直达链接，在电脑浏览器打开即可！",
+                                    )
                                 },
                                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                                 shape = RoundedCornerShape(10.dp),

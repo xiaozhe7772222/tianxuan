@@ -718,10 +718,7 @@ fun ToolCenterScreen(
                         TextButton(
                             onClick = {
                                 val fullLogs = toolLogs.joinToString("\n") { "[${it.event}] ${it.message}" }
-                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                                val clip = android.content.ClipData.newPlainText("tool_logs", fullLogs)
-                                clipboard?.setPrimaryClip(clip)
-                                android.widget.Toast.makeText(context, "日志已复制到剪贴板", android.widget.Toast.LENGTH_SHORT).show()
+                                copyToClipboard(context, fullLogs, "tool_logs", "日志已复制到剪贴板")
                             },
                             enabled = toolLogs.isNotEmpty(),
                         ) {
@@ -779,10 +776,13 @@ fun ToolCenterScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         TextButton(
                             onClick = {
-                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("TianXuan Bundle Install Log", componentInstallLog.joinToString("\n")))
-                                // 与工具日志复制行为保持一致，复制后给出反馈
-                                android.widget.Toast.makeText(context, "日志已复制到剪贴板", android.widget.Toast.LENGTH_SHORT).show()
+                                copyToClipboard(
+                                    context,
+                                    componentInstallLog.joinToString("\n"),
+                                    "TianXuan Bundle Install Log",
+                                    // 与工具日志复制行为保持一致，复制后给出反馈
+                                    "日志已复制到剪贴板",
+                                )
                             },
                             enabled = componentInstallLog.isNotEmpty(),
                         ) { Text("复制") }

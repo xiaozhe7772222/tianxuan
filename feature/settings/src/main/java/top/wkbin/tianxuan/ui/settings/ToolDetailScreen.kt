@@ -1,10 +1,7 @@
 package top.wkbin.tianxuan.ui.settings
 
 import org.koin.compose.viewmodel.koinViewModel
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
-import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -233,10 +230,11 @@ fun ToolDetailScreen(
                     logs = state.serviceLogs,
                     running = state.gatewayRunning,
                     onClear = viewModel::clearServiceLogs,
+                    // 统一走 ClipboardSupport.copyToClipboard：手抄版本用
+                    // `clipboard?.setPrimaryClip(...)` 后无条件弹「已复制」，
+                    // 拿不到剪贴板服务时会告诉用户复制成功，用户在粘贴处找不到内容。
                     onCopy = { text ->
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                        clipboard?.setPrimaryClip(ClipData.newPlainText("service_logs", text))
-                        Toast.makeText(context, "控制台日志已复制", Toast.LENGTH_SHORT).show()
+                        copyToClipboard(context, text, "service_logs", "控制台日志已复制")
                     },
                 )
             }
@@ -269,9 +267,7 @@ fun ToolDetailScreen(
                     onGenerate = viewModel::generateToken,
                     onClear = viewModel::clearToken,
                     onCopy = { url ->
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                        clipboard?.setPrimaryClip(ClipData.newPlainText("tool_url", url))
-                        Toast.makeText(context, "链接已复制", Toast.LENGTH_SHORT).show()
+                        copyToClipboard(context, url, "tool_url", "链接已复制")
                     },
                 )
             }
