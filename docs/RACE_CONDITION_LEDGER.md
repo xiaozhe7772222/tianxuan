@@ -1407,3 +1407,147 @@ internal fun shellQuoteForSingleLine(value: String): String =
 
 `feature/settings` **+3**（新增 `ClipboardUnificationTest`），加上缺陷 #7 的
 `CcSwitchCredentialsTest` 5 → 10。`feature/settings` 由 6 个测试文件增至 7 个。
+
+---
+
+## 缺陷 #9：FTP 登录口令使用非常量时间比较，且未设口令时放行任意口令
+
+**位置**：`runtime/src/main/java/top/wkbin/tianxuan/runtime/ftp/AndroidFtpServer.kt`
+`handlePass`（修复前 289–294 行）。
+
+**提交**：`18b29748`（父 `c0b90dc8`）。
+
+### 两个独立缺陷
+
+**其一，计时旁路信道（非常量时间比较）。** 原判定：
+
+```kotlin
+val passwordMatches = !config.password.isNullOrBlank() && pass == config.password
+```
+
+Kotlin 字符串 `==` 逐字符比较并在**首个不同字符处提前返回**，比较耗时因此与
+「前导正确字符数」正相关。攻击者按响应耗时逐位收敛，无需枚举整个口令空间。
+
+该场景**构成要件与 `webchat/PinVerifier` 逐条一致**：FTP 服务绑定**通配地址**，
+同网段任意主机可访问；服务在监听期间**长期常驻**；`AndroidFtpServer` 对认证请求
+**不做任何频率限制与失败锁定**。因此同样构成稳定的远程计时旁路信道，此前对
+`PinVerifier` 的论证可原样复用，这不是一次「理论上才成立」的加固。
+
+**其二，未设口令即放行（比第一条更严重）。** 注意判定里的 `isNullOrBlank() ||`
+——`config.password` 为 `null` 或空白时，**整个表达式短路为 `true`**，任意口令
+一律通过。也就是说：用户从未设置过 FTP 口令时，服务向同网段**开放了无密码的
+rootfs 读写**。这不是计时问题，而是直接的口令形同虚设。
+
+同一函数里还有第三个问题：`user.equals("root")` 的**后备匹配**——即使用户配置了
+自定义用户名，只要 FTP 客户端发 `USER root` 就能通过用户名校验，配置被绕过。
+
+### 修复
+
+抽出 `runtime/.../ftp/FtpCredentialVerifier.kt`（`internal object`，45 行）：
+
+```kotlin
+fun passwordMatches(candidate: String, expected: String?): Boolean {
+    if (expected.isNullOrBlank()) return false
+    return MessageDigest.isEqual(
+        candidate.toByteArray(Charsets.UTF_8),
+        expected.toByteArray(Charsets.UTF_8),
+    )
+}
+```
+
+`MessageDigest.isEqual` 是 JDK 保证的恒定时间比较，项目内已有先例
+（`ShellCommandFactory.verifyPin`、`webchat/PinVerifier`、`bridge/HostBridge`）。
+
+`handlePass` 改为：
+
+```kotlin
+val expectedUser = config.username.ifBlank { "root" }
+val userMatches = user.equals(expectedUser, ignoreCase = true)
+val passwordMatches = FtpCredentialVerifier.passwordMatches(pass, config.password)
+```
+
+三处语义变化：口令为空时**一律拒绝**（免密访问有且只有一个显式入口
+`anonymousEnabled`，该分支在本函数开头单独处理）；用户名校验**只认配置值**，
+删除 `root` 后备；比较改为恒定时间。
+
+### 为什么独立成文件
+
+与 `FtpBounceGuard` 的拆分理由同构，有两条：
+
+1. **可单测**——比对逻辑不依赖 socket 与 FTP 协议栈，可脱离 `Context` 直接断言；
+2. **不与行数棘轮冲突**——防护逻辑不该把主文件顶过上限。事实上这一点立刻兑现了：
+   初次改动让 `AndroidFtpServer.kt` 从 940 涨到 941，`architectureCheck` 直接
+   `BUILD FAILED`。按棘轮纪律**只能下调基线、不得为让检查通过而上调**，因此我把
+   调用处的 5 行注释压成 3 行（论证细节已完整保存在 `FtpCredentialVerifier` 的
+   KDoc 中，主文件只留一行指引），最终 **941 → 939 行**，低于基线。
+
+### 测试
+
+新增 `runtime/src/test/.../ftp/FtpCredentialVerifierTest.kt`，6 例：
+
+| 用例 | 覆盖 |
+|---|---|
+| `correct password matches` | 正例基线 |
+| `wrong password is rejected` | 后缀/大小写/空串/截断两侧 |
+| `unset expected password rejects every candidate` | **决定性守卫**：`null`/`""`/`"   "` 一律拒绝 |
+| `comparison is byte exact for unicode and control characters` | 不做 trim/折叠/归一化 |
+| `lookalike prefixes are not accepted` | 防草率 `startsWith`/`contains` |
+| `server delegates password comparison to this verifier` | 源码级守卫 |
+
+### 守卫写法上踩到的三个坑（如实记录）
+
+这一批的第三条（源码级守卫）在写成的过程中连续暴露了三个问题，都属于
+「**守卫自己不可靠**」，比缺陷本身更值得记录：
+
+**坑一：`substringAfter` 在右界缺失时返回超长文本，而非空串。** 首版写成
+
+```kotlin
+val handlePass = source.substringAfter("private fun handlePass(")
+    .substringBefore("private fun handleMode(")
+```
+
+若源码被改动导致右界不存在，`substringBefore` 找不到分隔符会**原样返回整个剩余
+文本**——包含 `handleMode` 之后的所有代码，里面自然含 `FtpCredentialVerifier`，
+断言恒过。改为 `indexOf` + 显式断言 `end > start`，边界丢立即报错而不是静默放宽。
+
+**坑二：注释里逐字引用旧代码，会被守卫当成代码命中。** 关于「本条守卫的写法定式」的注释里写了
+"不得退回 `pass == config.password` 或 `isNullOrBlank() ||`"，结果 `contains`
+扫描命中了**注释本身**，测试直接红在 `isNullOrBlank() ||` 这一条上。修复：
+按行 `filterNot { it.trimStart().startsWith("//") }` 剔除注释行后再判定。
+**这是一个通用教训——任何对源码做子串扫描的守卫，都必须先把注释排除，否则
+「把旧代码写进注释解释为什么不能这么写」这件事本身就会让守卫失效或误报。**
+
+**坑三（本项目第 4 次出现）：子串判定无法区分「已修复」与「已退化」。**
+前两个坑修完后守卫才真正可用。反向验证：把 `handlePass` **忠实回退**为
+
+```kotlin
+val passwordMatches = config.password.isNullOrBlank() || pass == config.password
+if (user.equals(config.username.ifBlank { "root" }, ignoreCase = true) || user.equals("root")) {
+```
+
+`FtpCredentialVerifierTest` **6 例中恰好 1 例变红**，红的正是
+`server delegates password comparison to this verifier`，位置 `FtpCredentialVerifierTest.kt:73`
+（「handlePass 未委托给 FtpCredentialVerifier」）。恢复修复态后 6/6 全绿。
+**精确变红、且只有预期的那一条变红**，守卫有效。
+
+至此本项目已**连续 4 次**（缺陷 #7 两次、缺陷 #8 一次、缺陷 #9 一次）出现
+「子串/固定长度窗口判定无法区分已修复与已退化」的同类问题。定式已经收敛：
+
+> 凡是要区分「某结构存在/不存在」的断言，**必须按语法结构判定**
+> （取函数体区间、取某行实参、按行剥离注释），
+> **不能做子串匹配，也不能用固定长度窗口**。
+
+### 验证
+
+- 全项目 **1473 tests, 0 failures, 0 errors, 0 skipped**（237 个 suite；
+  较上一批 1467 增 6，即本次新增的 6 例）。
+- `architectureCheck`：31 个模块 · 依赖白名单/无环/import 黑名单/尺寸棘轮 全部通过。
+- `AndroidFtpServer.kt` **941 → 939 行**（基线 940）；`FtpCredentialVerifier.kt` 45 行。
+- 远端 `18b29748` 三个文件逐字节校验：**ALL MATCH**。
+
+### 边界声明
+
+这**不是**在补救 FTP 协议本身。FTP 是**明文协议**，口令在网上直接可嗅探，恒定
+时间比较对它没有任何帮助。恒定时间比较消除的是**主动攻击者逐字节猜解口令**的
+通道，属于纵深防御的一层，**不能替代「不要把 FTP 暴露到不可信网络」这一根本
+边界**。这一句已逐字写入 `FtpCredentialVerifier` 的 KDoc，避免后来者高估该修复。
