@@ -38,7 +38,6 @@ val featureSettingsModule = module {
             context = get(),
             linuxRuntime = get(),
             preferences = get(),
-            sshPreferences = get(),
             manager = get(),
         )
     }

@@ -362,6 +362,103 @@ class WorkspaceManagerTest {
         assertTrue(target.listFiles().orEmpty().isEmpty())
     }
 
+    // ---- APK 解包（unpackApk）的防膨胀闸 --------------------------------------
+    //
+    // 背景：unpackApk 与 extractProjectArchive 是同一份文件里的两条解压路径。
+    // 后者有三道闸（条目数 / 单文件 / 总体积），前者此前**一道都没有**，
+    // 只防了路径穿越。而 APK 是用户从系统文件选择器挑的**任意文件**，
+    // 可以声明任意大的解压体积——这是两条路径口径不一致留下的口子。
+
+    @Test
+    fun apkUnpackRejectsZipBombByTotalBytes() {
+        // 一个 entry 声称解压后超过总体积上限。用高压缩比数据（全是 0），
+        // 使得到的 ZIP 很小，但要求 unpackApk 在写入过程中就撞上上限并失败，
+        // 而不是等把 4 GiB 落盘之后才发现。
+        val archive = zipOfZeroFilled("assets/huge.bin", sizeBytes = APK_BOMB_BYTES)
+        val apk = File(workspaceDir, "bomb.apk").apply { writeBytes(archive) }
+        val unpacked = File(workspaceDir, "bomb-unpacked").apply { mkdirs() }
+
+        // 用例有效性守卫：炸弹必须真的够大。若构造参数写错（例如常量溢出成负数），
+        // 包里会是 0 字节，"解包必然不失败"就成了假绿——测的是空包，不是炸弹。
+        // 这条断言让那种错误在构造阶段就暴露，而不是伪装成"产品代码没设防"。
+        assertTrue(
+            "构造出的炸弹只有 ${apk.length()} 字节，未达到上限 $APK_BOMB_BYTES，用例无效",
+            apk.length() > 1024,
+        )
+
+        val result = runCatching { manager.unpackApk(apk, unpacked) }
+
+        assertTrue("解包超限必须失败，实际未失败", result.isFailure)
+        // 关键：失败必须是**闸门拦下**，不是磁盘写满之类的噪声。
+        // 断言解出来的东西没超过上限，且确实是体积类报错。
+        val unpackedBytes = unpacked.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        assertTrue(
+            "已落盘 $unpackedBytes 字节，超出总体积上限仍算漏放",
+            unpackedBytes <= APK_TOTAL_LIMIT_BYTES + 8 * 1024 * 1024,
+        )
+    }
+
+    @Test
+    fun apkUnpackAllowsOrdinaryApk() {
+        // 负向对照：普通小包必须能正常解出来。
+        // 没有这条，「一律拦下」也能让上面那条变绿——那就不是防膨胀，是禁用功能。
+        val archive = zipOf(
+            "AndroidManifest.xml" to "<manifest/>",
+            "classes.dex" to "dexdata",
+            "res/values/strings.xml" to "<resources/>",
+        )
+        val apk = File(workspaceDir, "normal.apk").apply { writeBytes(archive) }
+        val unpacked = File(workspaceDir, "normal-unpacked").apply { mkdirs() }
+
+        manager.unpackApk(apk, unpacked)
+
+        assertEquals("<manifest/>", unpacked.resolve("AndroidManifest.xml").readText())
+        assertEquals("dexdata", unpacked.resolve("classes.dex").readText())
+        assertEquals("<resources/>", unpacked.resolve("res/values/strings.xml").readText())
+    }
+
+    @Test
+    fun apkUnpackRejectsPathTraversal() {
+        // unpackApk 原有行为不能回退：路径穿越仍必须被丢弃。
+        val archive = zipOf("../escaped-from-apk.txt" to "unsafe")
+        val apk = File(workspaceDir, "traversal.apk").apply { writeBytes(archive) }
+        val unpacked = File(workspaceDir, "traversal-unpacked").apply { mkdirs() }
+
+        manager.unpackApk(apk, unpacked)
+
+        assertFalse(File(workspaceDir, "escaped-from-apk.txt").exists())
+    }
+
+    /** 造一个「n 字节全零、高压缩比」的 ZIP，用来低成本触发体积闸。 */
+    private fun zipOfZeroFilled(name: String, sizeBytes: Long): ByteArray {
+        val bytes = ByteArrayOutputStream()
+        ZipOutputStream(bytes).use { zip ->
+            zip.putNextEntry(ZipEntry(name))
+            val buffer = ByteArray(1 shl 20) // 1 MiB
+            var written = 0L
+            while (written < sizeBytes) {
+                val chunk = minOf(buffer.size.toLong(), sizeBytes - written).toInt()
+                zip.write(buffer, 0, chunk)
+                written += chunk
+            }
+            zip.closeEntry()
+        }
+        return bytes.toByteArray()
+    }
+
+    private companion object {
+        /**
+         * 触发上限所需的最小体积：总体积上限 + 64 MiB。
+         *
+         * 必须是 Long。写成 `4 * 1024 * 1024 * 1024` 这种字面量时，Kotlin 按 Int
+         * 计算，结果溢出成负数——构造循环一次都不执行，包体为空，
+         * 于是"炸弹"根本不存在，用例会以「未失败」告终（这正是本次踩到的坑：
+         * 测试逻辑错了，却看起来像产品代码没设防）。
+         */
+        const val APK_BOMB_BYTES = 4L * 1024 * 1024 * 1024 + 64L * 1024 * 1024
+        const val APK_TOTAL_LIMIT_BYTES = 4L * 1024 * 1024 * 1024
+    }
+
     private fun zipOf(vararg entries: Pair<String, String>): ByteArray {
         val bytes = ByteArrayOutputStream()
         ZipOutputStream(bytes).use { zip ->

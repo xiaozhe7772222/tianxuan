@@ -166,10 +166,26 @@ systemctl restart tianxuan-fetch     # 断点续传，重跑安全
 sync-tianxuan-plugins# 补齐软链，幂等
 gen-tianxuan-manifest                # 刷新 manifest.json，幂等
 python3 /usr/local/share/tianxuan/apkmanifest_test.py   # AXML 解析器自测（7 项）
+python3 /usr/local/share/tianxuan/gen_manifest_test.py  # 清单生成自测（6 组）
 tail -f /var/log/tianxuan-fetch.log
 grep -E 'DONE|FAIL|ALL DONE' /var/log/tianxuan-fetch.log
 journalctl -u tianxuan-dist -f
 ```
+
+发布前另有一道**产物洁净度守卫自测**，在仓库里跑（需要 Android SDK）：
+
+```bash
+python3 ops/release_guard_test.py
+# release_guard_test: OK（干净包放行、manifest 含组件的包被拦、
+#                      dex 含类的包被拦、release.sh 守卫模式逐分支核对通过）
+```
+
+它覆盖三件事：① 用 `aapt2 link` 真编出一个含 LeakCanary 组件的 APK，
+确认 release.sh 的守卫会拦下它；② 不含组件的干净包必须放行（守卫若「一律拦下」
+等于没有守卫）；③ 从 `release.sh` 里**抠出那个真正被 grep 执行的模式**，
+逐分支核对——注释行会被先剥掉，所以「把模式拼错一个字」「删掉某个分支」
+「把整行注释掉」三类退化都会让它变红。无 SDK 时报 `SKIP` 并以 0 退出，
+不误报失败。
 
 ### APK 版本号读取（apkmanifest.py）
 

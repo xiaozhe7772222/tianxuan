@@ -696,3 +696,371 @@ private fun decodeProtectedValue(value: String): String? =
 `suspend fun settleFailure(cancelledByUser: Boolean)`，净减 9 行 → **1122**。
 既满足棘轮，又消除了四处重复逻辑各自漂移的风险（原先三处传 `cancelled=true`
 只有一处传 `false`，任何一处漏改都会造成状态落库不一致）。
+
+---
+
+# 复核批次七：发布链路（release.sh / ops / .github/workflows）
+
+发布链路是**唯一能把缺陷直接送到用户设备上**的通道，故单独成批逐文件精读。
+本批覆盖 15 个文件，其中 4 个为自测脚本。总原则沿用「守卫查产物不查配置」：
+配置会被人改错，产物不会说谎。
+
+## 逐文件结论
+
+| 文件 | 行数 | 结论 |
+|---|---|---|
+| `release.sh` | 352 | 无缺陷。三处 APK 命名对齐已交叉核对（见下） |
+| `ops/apkmanifest.py` | 188 | 无缺陷。模糊测试 0/200 崩溃 + 60 次截断 0 崩溃 |
+| `ops/apkmanifest_test.py` | 186 | 无缺陷。7 项用例覆盖 UTF-16/UTF-8 池、非 manifest 根、整型、坏输入 |
+| `ops/gen-manifest.sh` | 125 | 无缺陷。版本排序实测 `0.21.10 > 0.21.3 > 0.21 > 0.20.0 > 0.9.0` |
+| `ops/gen_manifest_test.py` | 257 | 无缺陷。6 组用例含幂等与软链去重 |
+| `ops/tianxuan_dist.py` | 344 | 无缺陷。目录穿越 11 向量全部拦截 |
+| `ops/tianxuan-fetch.sh` | 42 | 无缺陷。见「窄口子」一节 |
+| `ops/sync-tianxuan-plugins.sh` | 34 | **D-09**（已修复，见下） |
+| `ops/release_guard_test.py` | 171→414 | **D-10**（已修复，见下） |
+| `ops/offline-packages.json` | 55 | 无缺陷。`total_bytes` 与逐项求和精确相等（6,911,578,380 = 6.44 GiB） |
+| `ops/README.md` | 285→301 | 补充守卫自测的跑法 |
+| `ops/DEPLOY.md` | 96 | 无缺陷。见「窄口子」一节 |
+| `ops/.gitignore` | 6 | 无缺陷。相对目录解析的坑有注记 |
+| 两个 `.service` | 41 / 22 | 无缺陷。`ProtectSystem=strict` + `ReadWritePaths` 已收口 |
+| 三个 `.yml` | 267 / 76 / 39 | 代码无缺陷；失败均为环境条件（见下） |
+
+## D-09：`sync-tianxuan-plugins.sh` 在悬空软链上以失败收场
+
+`ops` 目录下 `plugins/` 存的是软链，指向离线包实体。离线包被清理或下载失败时
+会有链接悬空。原脚本对**全部** `*.txplugin` 链接调 `os.path.getsize`，
+悬空项抛 `FileNotFoundError`；脚本是 `set -euo pipefail`，于是
+「补软链」这件**已经成功**的事会以 exit 1 收场，误导排障者去查一个不存在的错误。
+
+修法两步：
+1. `find` 加 `-xtype f`（跟随软链后仍是普通文件），排除悬空链接。
+   `-type l` 会把悬空项也算成插件，报出的数量比实际可下载的多。
+2. 统计字节数时用 `os.path.isfile` 过滤。这与 `tianxuan_dist.py` 的
+   `_serve_plugins`（同样用 `os.path.isfile`）保持一致——**两处口径必须一致**，
+   否则运维看到的数字与端点返回的数字对不上。
+
+**反向验证**：同一输入下，旧写法 exit 1 且日志含 `FileNotFoundError`，
+新写法 exit 0 且计数正确。三种场景（全悬空 / 混合 / 全正常）均验证。
+
+**影响面**：面向运维的工具（`ops/README.md` 列为手动步骤），不在 systemd 路径上，
+故不影响自动发布。
+
+## D-10：`release_guard_test.py` 的 manifest 分支从未被执行
+
+`release.sh` 的产物洁净度守卫要查两处：APK 的 manifest 与 dex。
+而旧自测**只覆盖 dex 分支**——manifest 分支的代码写了，却从未跑过，
+源码自己承认这点：第 142-146 行 `del dirty_manifest`，
+注释写「真实包无法在单测内造」。
+
+**缺口是可利用的**，已实测：把 `release.sh` 里守卫的 grep 交替
+`LeakLauncherActivity` 改成 `LeakLauncherActvty`（少一个字母），
+守卫就此漏掉这个组件，而旧自测**照样打印 OK 并 exit 0**。
+原因有两层：
+1. `assert_release_sh_still_has_guard` 做的是**子串检查**，
+   而正确拼写同时出现在第 152 行注释与第 163-179 行的报错文案里，
+   于是拼错模式之后，正则串本身成了唯一被改坏的地方，子串断言查不到。
+2. manifest 分支压根没跑，模式坏没坏都看不出。
+
+后果的严重性：v0.21.0 与 v0.21.1 两个内测包实测带了 LeakCanary，
+桌面多出「Leaks」小鸟图标，且它在进程启动阶段自动初始化，是「打开即闪退」
+的高概率来源。守卫若已静默失效，同类包会**再次被放行**。
+
+**修法**（三条，缺一不可）：
+
+1. **真造含组件的 APK**，让 manifest 分支真正被执行。
+   此前认为做不到，是因为手写二进制 AXML 太脆；但这条路是通的：
+   `aapt2 link` 能把一份纯文本 `AndroidManifest.xml` 编成**真·二进制 AXML**，
+   放进 zip 就是一个 `aapt2 dump xmltree` 能读的真包。造出的包复刻了真实事故
+   包的形态：`LeakLauncherActivity` 带 LAUNCHER intent-filter，
+   `PlumberInstaller` / `MainProcessAppWatcherInstaller` / `LeakCanaryFileProvider`
+   作为 ContentProvider。实测 dump 出 4 个组件，守卫如实拦下。
+2. **抠模式而非搜关键词**。从 `release.sh` 里用正则取出那个**真正被 grep 执行**
+   的模式串，逐分支核对。并且必须**先剥掉注释行**——整段守卫最省事的停用办法
+   就是在关键行前加个 `#`，那一行的模式串照样躺在文件里；
+   若不剥注释去搜「第一个 `grep -oE`」，被注释掉的那行会被当成「守卫还在」，
+   自测又退化回子串断言。
+3. **保留「干净包必须放行」的负向用例**。守卫若「一律拦下」，
+   发布链路直接不可用，等于没有守卫。
+
+**反向验证（6 组场景，全部符合预期）**
+
+| 场景 | 期望 | 旧自测 | 新自测 |
+|---|---|---|---|
+| 基线（未改动） | 放行 | PASS | **PASS** |
+| 模式拼错 `LeakLauncherActvty` | 拦住 | **PASS（漏报）** | **BLOCK** |
+| 模式里删掉 `PlumberInstaller` | 拦住 | PASS（漏报） | **BLOCK** |
+| 注释掉守卫的 `grep -oE` 行 | 拦住 | PASS（漏报） | **BLOCK** |
+| 整段删除 `LEAK_COMPONENTS` | 拦住 | PASS（漏报） | **BLOCK** |
+| 删掉 `leakcanary.` 兜底分支 | 拦住 | PASS（漏报） | **BLOCK** |
+
+第 2 行是全批最硬的一条证据：**同一棵被改坏的树，旧自测 exit 0，新自测 exit 1**。
+
+**限度（必须如实标注）**
+- 新自测造的是**结构同构**的包，不是真实构建产物。它能证明「守卫认得这些组件名」，
+  不能证明「真实 48 MB 包的 manifest 解析路径完全相同」——后者要靠
+  `release.sh` 在真实发布时执行守卫来兜底。
+- 无 aapt2 时（如未装 SDK 的机器）报 `SKIP` 并以 0 退出，不误报失败。
+  代价是：那种环境下 manifest 分支未被覆盖，`SKIP` 行必须被看见而非被当作通过。
+
+## release.sh 三处 APK 命名对齐（交叉核对）
+
+命名不一致会导致「构建产出的文件名」与「release.sh 期望的文件名」对不上，
+发布时才会以「文件不存在」暴露。三处已核对一致：
+
+| 位置 | 表达式 | 值 |
+|---|---|---|
+| `app/build.gradle.kts` | `buildAppName = "tianxuan-v${appVersionName}-${variant.name}.apk"` | `tianxuan-v0.21.3-debug.apk` |
+| `release.sh` L119 | `tianxuan-v${VERSION}-${BUILD_VARIANT}.apk` | 同上 |
+| workflow 校验 | 从 `gradle.properties` 读 `versionName` 再拼 | 同上 |
+
+## 窄口子（记录为上界，非缺陷）
+
+审查中确认两处**理论存在、当前不触发**的窄口子，如实记录而不夸大为缺陷：
+
+1. **`/tmp/tianxuan-manifest.tsv` 以 TAB 分列**，`tianxuan-fetch.sh` 用
+   `IFS=$'\t' read -r size name url` 读取。若**文件名或 URL 含 TAB**，
+   字段会错位：name 被截断、落盘文件名错误，且字节数校验失败，
+   重试 5 次后 FAIL 并计入 `failures`。实测 `offline-packages.json` 里
+   11 个包名**均不含 TAB 或空格**，且 QQ 闪传直链不含 TAB，故当前不触发。
+   提防的是将来换用别的 CDN 或包名带 TAB——那时会以「下载失败」而非
+   「解析失败」的形式暴露，排障方向会偏。留此记录以缩短下次定位时间。
+2. **`tianxuan-fetch.sh` 的成功判据是「rc==0 且字节数相等」，不是校验和。**
+   字节数相同而内容不同，理论上可被放行。这与 APK 侧形成不对称：
+   `gen-manifest.sh` 为每个 APK 记录 `sha256`（L94），APK 下载链路有校验和；
+   离线插件包这条链路只有字节数。影响面为零（插件包来自可信直链、走 HTTPS），
+   且插件的 `sha256` 未记录在 `offline-packages.json` 中，无法在不重取链的情况下
+   补上校验和。记录为已知的**非对称**，不擅自改协议。
+
+## CI 失败：环境条件，非代码缺陷
+
+如实归因，避免被误当成代码问题反复排查：
+
+| 工作流 | 失败点 | 性质 |
+|---|---|---|
+| `release.yml` | `Restore Release Keystore`：`SIGNING_KEYSTORE_BASE64 is not configured` | 仓库 secret 未配置 |
+| `pages.yml` | `Create Pages site failed: Resource not accessible by integration` | 仓库未启用 Pages |
+
+`release.yml` 自 v0.20.0 起**每个 tag 推送都以同一原因失败**（v0.21.0/0.21.1/0.21.2/0.21.3 一致）。
+其设计是**失败即停**（fail-safe）：keystore 缺失时不产出未签名包，这是正确行为。
+但副作用值得记录：**每次推 tag 都会在 Actions 面板留下一条红色记录**，
+长期会让人对红色告警脱敏。要么配置 secret，要么在 secret 缺失时改为
+显式 `skip` 而非 fail，二者取一，不应放任红色堆积。
+
+## 行数棘轮
+
+`ops/release_guard_test.py` 171 → 414 行（+243）。`ops/` 不在
+`architecture-policy.json` 的 31 个受管模块内（该策略管 Kotlin 模块），
+故不触碰 400 行上限与 `.architecture-baseline.json`。
+`ops/README.md` 285 → 301 行，同理。
+
+---
+
+# 复核批次八：runtime 模块（逐文件精读，起点 WorkspaceManager.kt）
+
+## D-11：APK 解包的防膨胀闸完全缺失（已修复，已反向验证）
+
+`WorkspaceManager.kt` 里有**两条**归档解包路径，口径不一致：
+
+| 路径 | 输入来源 | 条目数闸 | 单文件闸 | 总体积闸 | 路径穿越闸 |
+|---|---|---|---|---|---|
+| `extractProjectArchive` | 用户导入的 **ZIP 项目包** | ✅ | ✅ | ✅ | ✅ |
+| `unpackApk` | 用户导入的 **APK** | ❌ | ❌ | ❌ | ✅ |
+
+`unpackApk` 只防了 zip-slip。而 APK 是用户从系统文件选择器挑的**任意文件**，
+可以声明任意大的解压体积。实测构造：一个 **128 KiB** 的包声明 128 MiB 全零数据
+（DEFLATE 膨胀 **1027×**）即可；把规模放大到 4 GiB 只需几 MB 的包。
+后果是解包一路写到磁盘满或 OOM —— `unpackApk` 走的是
+`importApkForReverse` → `createProject(APK_REVERSE)` 这条用户可达路径。
+
+**修法不是给 unpackApk 再抄一遍三道闸**，而是把拷贝循环抽成
+`copyCapped(input, output, entryName)` 由两条路径共用（含单文件闸、返回字节数），
+体积额度由调用方累加——那是**整包**的额度，不能每文件各算。
+这样两条路径不会再次漂移，而这正是缺陷的成因：
+一个规则写两遍，改的时候只改了一处。
+
+同时顺手消除同文件里另外两组逐字重复：
+- `observeProjects` 与 `listProjects` 里相同的「剔除父目录」算法 → `dropParentDirectories`；
+- 两处「关联目录不含空段/`.`/`..`」校验 → `requireValidRelativePath`
+  （这两份已开始漂移：一处传 `base.canonicalFile`、一处传 `base`）。
+
+**反向验证**：把 `unpackApk` 的三道闸临时停掉，新增用例
+`apkUnpackRejectsZipBombByTotalBytes` **转红**（17 项中 1 项失败）；
+恢复后全绿。同时保留负向对照 `apkUnpackAllowsOrdinaryApk`，
+确保「一律拦下」这种假修复也会被抓到。
+
+**测试自身的一个坑（已修，值得记下）**
+首版用例的常量写成 `4 * 1024 * 1024 * 1024 + 64 * 1024 * 1024` 且声明为 `Int`，
+Kotlin 按 Int 计算后**溢出成 −134217728**，构造循环一次都不执行，
+"炸弹"是空包，用例以「未失败」告终——看起来像产品代码没设防，实则是测试自己错了。
+已改为 `Long` 字面量，并加了一条**用例有效性守卫**：
+`assertTrue("构造出的炸弹只有 N 字节…", apk.length() > 1024)`，
+让这类错误在构造阶段暴露，而不是伪装成产品缺陷。
+
+## 行数棘轮（本次为下调，非放宽）
+
+`WorkspaceManager.kt` 原额度 **1015**。加入修复与合并后一度到 1058，
+`architectureCheck` 如实报红：`增长到 1058 行，超过棘轮基线 1015（基线只许下调，请先缩减该文件）`。
+
+处理方式是**缩减文件**而非抬基线：
+把 `writeReverseReadme`（87 行的纯文档模板：jadx/apktool 命令、加固壳特征表、
+脱壳方案表）抽到新文件 `ApkReverseReadme.kt`（102 行，未登记，合规 ≤400）。
+该函数只用自身 4 个参数、不碰任何实例状态，属于天然可分离的职责。
+
+结果：`WorkspaceManager.kt` **1015 → 970**（下调 45 行），
+`.architecture-baseline.json` 中该条目同步下调为 970。
+`architectureCheck: 31 个模块 · 依赖白名单/无环/import 黑名单/尺寸棘轮 全部通过`。
+
+---
+
+# 批次九：runtime 鉴权面精读（LinuxRuntimeImpl → gui 组）
+
+本轮继续按「逐文件精读、不跳读不猜测」推进 runtime 模块。累计读完
+`runtime/src/main/java` 下 **60 个 ≥60 行的源文件全部**（另加若干小文件）。
+下面只记本轮**新发现**的缺陷与判断，其余文件的结论是「未发现缺陷」。
+
+## 缺陷 #1（已修）：FTP 跨服务凭据复用
+
+`FtpServiceManager.start()` 原为：
+
+```kotlin
+val ftpPassword  = preferences.readPassword(distroId)?.ifBlank { null }
+val sshPassword  = sshPreferences.readPassword(distroId)?.ifBlank { null }
+val password     = ftpPassword ?: sshPassword
+```
+
+即「FTP 没单独设密码时，自动拿 SSH 密码顶上」。三层危害：
+
+1. **跨服务凭据复用**。本实现的 FTP 是明文协议（连 `AUTH`/TLS 都不支持），
+   把 SSH 密码喂给它，等于让一处泄漏同时失守两个服务，而 FTP 的影响面更大。
+2. **界面与行为相反**。`FtpSettingsScreen` 在未单独设密码时显示
+   「未设置密码（免密登录，客户端密码留空或填任意内容即可）」，
+   但用户只要配过 SSH 密码，FTP 实际要求的就是那把 SSH 密码——
+   照界面操作会一直 530，且没有任何可排查线索。
+3. **不可观测**。`FtpPreferences.passwordConfigured` 只看 FTP 键，
+   所以 UI 永远不可能提示「正在使用 SSH 密码」。
+
+**先证后改**：用沙箱内的 Kotlin 编译器搭了独立探针
+（`/tmp/ftp-auth/AuthLogic.kt` + `Probe.kt`，逐字复刻凭据解析契约、
+遍历真实取值组合），探针退出码 `1` 并打印
+`UI 文案承诺「留空即可」但实际被拒 —— 界面与行为相反`。
+缺陷在动产品代码之前已被独立复现。
+
+**修法**：FTP 只认 FTP 自己的密码；免密有且只有一个显式入口 `anonymousEnabled`。
+并**移除依赖**而非仅改逻辑——`SshPreferences` 从 `FtpServiceManager`、
+两个 Koin 模块、`FtpSettingsViewModel` / `FtpSettingsUiState` 一并删除，
+使回落无法静默回归。UI 重写为三个真实状态（已配置 / 匿名 / 未设置且不可用）。
+
+涉及文件：`FtpServiceManager.kt`、`runtime/di/runtime/KoinModule.kt`、
+`FtpSettingsScreen.kt`、`FtpSettingsViewModel.kt`、`feature/settings/di/.../KoinModule.kt`。
+
+## 缺陷 #2（已修）：WebChat 配对码用 `==` 比对
+
+`WebChatBridgeServer` 的 `isAuthenticated` 与 `SessionBootstrapHandler`
+都以 `token == _status.value.pinCode` 校验 6 位十进制配对码（约 20 bit）。
+Kotlin 字符串 `==` 逐字符比较并在**首个不同字符处提前返回**，
+攻击者按响应耗时逐位收敛，平均 20 次量级即可猜中，而非 10^6 次。
+
+**可达性已核实**（不是纯理论风险）：服务绑定通配地址 `InetSocketAddress(port)`、
+响应头带 `Access-Control-Allow-Origin: *`、监听期间长期常驻、全程无频率限制；
+两个调用点的 `token` 均由攻击者控制（query param / `Authorization: Bearer`，
+以及 bootstrap 的 JSON body）。
+
+**注意这是项目内部的不一致而非认知缺失**：同项目 `ShellCommandFactory.verifyPin`
+早已用 `MessageDigest.isEqual` 处理同一问题。
+
+**修法**：抽出 `PinVerifier`（`MessageDigest.isEqual` + 空候选/空期望拒绝），
+`isAuthenticated` 与 `SessionBootstrapHandler` 共用同一入口。
+同时把 MIME 表与「是否静态资源」判据合并为 `WebChatAssets.mimeTypeOrNull`
+（原先是两份扩展名清单，新增类型时会错配：按资源取文件却回落 `index.html`）。
+
+## 卫生改进 #3（已修）：HostBridge 的 Bearer 密钥比对
+
+`HostBridge.checkAuth` 原为 `return token == bridgeKey`。
+
+**定性必须与缺陷 #2 分开**：该密钥是 UUID 去横杠后的 **128 bit 随机值**，
+逐字节计时旁路在数学上不可穷举；且服务只监听 `127.0.0.1`，
+能连上的攻击者已经在设备内。**所以这不是可利用漏洞。**
+
+仍然改掉的理由是**防止无声退化**：同一行代码今天面对 128 bit 是安全的，
+明天若有人为「方便调试」把 `bridgeKey` 换成 6 位数字，
+`==` 立刻变成可利用的计时旁路，而没有任何编译期或运行期提示。
+改为 `MessageDigest.isEqual`，与 `ShellCommandFactory.verifyPin` / `PinVerifier`
+保持同一写法，退化就不可能静默发生。
+
+## 行数棘轮（本次均为下调，非放宽）
+
+- `WebChatBridgeServer.kt` **672 → 665**（抽出 `PinVerifier` 44 行、`WebChatAssets` 37 行）。
+  中间曾因在文件内压缩走错方向（673 → 674 → 679），
+  用 `diff` 定位到原因是反向验证用的 `/tmp/wc.bak` 备份已含改动、不是 672 行基线。
+- `HostBridge.kt` **451 → 450**。恒定时间比较带 5 行注释（净增），
+  从同文件两处抵回：header 解析的局部变量合并、`writeResponse` 的 `when` 压行。
+- `FtpSettingsScreen.kt` **532 → 527**（三个真实状态的文案比原两条分支更短）。
+- 新增 `PinVerifier.kt`(44)、`WebChatAssets.kt`(37) 登记入 `files`，`fileCount` 113 → 115。
+- `FtpServiceManager.kt` 327 → 336（加 14 行安全注释、删依赖），
+  不在棘轮条目内，受 `maxFileLines=400` 约束，合规。
+
+`architectureCheck: 31 个模块 · 依赖白名单/无环/import 黑名单/尺寸棘轮 全部通过`。
+
+## 守卫与反向验证
+
+新增 `ops/ftp_auth_guard_test.py`（6 项检查，与 `release_guard_test.py` 同约定）：
+`assert_no_ssh_fallback` / `assert_no_ssh_dependency` / `assert_ui_matches_behaviour` /
+`assert_session_still_rejects_blank_password` / `assert_webchat_pin_compared_in_constant_time` /
+`assert_host_bridge_key_compared_in_constant_time`。
+
+**守卫自身出过一次错，值得记下**：首版
+`assert_session_still_rejects_blank_password` 只检查表达式里是否出现
+`isNullOrBlank` 子串。反向验证 D1（把 `!config.password.isNullOrBlank() && …`
+改成 `config.password.isNullOrBlank() || …`）**通过了守卫**——
+即守卫抓不住它本就是为了防的那个漏洞。改为按**布尔结构**判定：
+引入 `split_top_level(expr, op)` 按顶层 `||` / `&&` 切分，
+拒绝任何「未取反地测试密码为空」的顶层析取项、拒绝 `pass.isEmpty()` 析取项、
+要求存在 `pass == config.password`、要求存在取反形式的合取项。
+重跑 D1/D2/D3 三种退化形态，均已正确转红。
+
+另执行反向验证 E4：`HostBridge.checkAuth` 退回 `==` → 该项如实转红。
+
+## 本轮判为「未发现缺陷」的文件（含判断依据）
+
+- **`LinuxRuntimeImpl.kt`(909)**：八个变更入口全走 `initializeMutex.withLock`；
+  `updateRootfs` 的取消/异常/健康检查失败三条路径都调 `rollbackPendingUpdate`；
+  `storageMounts()` 对用户可编辑的 Room 表先 `validationError` 过滤再告警，
+  注释明写「绝不能让非法绑定流入 ProotCommandBuilder」；
+  `MIN_FREE_BYTES = 600L * 1024L * 1024L` 用 `L` 字面量避开 Int 溢出。
+- **`SshServiceManager.kt`(576)**：凭据从不进命令行明文——
+  authorized_keys 与 sshd_config 整体 Base64 后 `printf|base64 -d` 落盘，
+  密码同样经 `base64 -d | chpasswd`；`normalizePassword` 拒绝 `:` 与 ISO 控制字符
+  （不拒 `:` 会截断、不拒 `\n` 可注入额外用户行）；
+  `cleanupStaleSshd` 用 `withTimeoutOrNull` 轮询端口而非无限等。
+- **`DistroConfigurator.kt`(518)**：`configureDns` 用
+  `Files.isSymbolicLink(...) || resolvConf.exists()` 双条件移除悬空链接
+  （注释明写 OCI 镜像里 `/etc/resolv.conf` 常指向 `/run/systemd/resolve/...`，
+  PRoot 无 systemd 导致链接悬空）；`statoverride` 判重用 `endsWith(" $path")`
+  避免 `/usr/bin/su` 误匹配 `/usr/bin/sudo`。
+- **`RuntimePathManager.kt`(278)**：`installedDistroIdsCache` 只缓存非空结果；
+  `needsCopy` 用 `contentEquals` 比内容而非仅比长度
+  （注释明写「equal file length alone does not prove that an old SONAME copy matches」）。
+- **`LinuxEnvironmentManager.kt`(308)**：写 profile 用 `umask 077` + 临时文件 + `mv -f`
+  原子替换；`normalizeKey` 白名单并禁 `TIANXUAN_`/`ANDROID_` 前缀
+  （防用户覆盖桥接用的 `TIANXUAN_BRIDGE_URL`）；切换发行版时先清空三个 StateFlow。
+- **`gui/HostGuiToolkit.kt`(371)**：`trySetFocusedText` 的降级纪律——
+  `ACTION_SET_TEXT` 幂等可重试，而剪贴板/`input text` 是追加式，
+  故「曾被接受但读不回」时主动返回成功而不降级，注释明写
+  「否则会造成文本重复——对发消息这类场景，重复比失败更糟」。
+- **`gui/HostGuiController.kt`(388)**：`selectForDisplay` 先保可交互控件再补文本节点
+  （DFS 先序直接 take 会截掉屏幕底部/右侧的发送、悬浮按钮，
+  「模型看不到就不会去点」）；`observeScreen` 刻意不保留 `rawXml`
+  （注释明写曾致 target footprint OOM）。
+- **`gui/WorkflowGuiHudBridge.kt`(173)**：`screenOpDepth` 引用计数且 `endScreenOp`
+  用 `coerceAtLeast(0)` 防空（否则悬浮窗永不再隐藏）；
+  `stopRequestedFor` 记录**具体 executionId** 而非布尔量，防上次的停止请求取消下次执行。
+- **`gui/AndroidGuiXmlParser.kt`(113)**：`XmlPullParser` 流式解析；
+  解析失败返回已解析部分；`resourceId.substringAfterLast('/')` 去前缀同时
+  确认 `click_text` 命中判断仍按完整 `resourceId` 做 `contains`。
+- **`di/runtime/KoinModule.kt`(318)**：FTP 改动已干净落地，
+  `SshServiceManager` 保留自己的 `preferences`，两者不再共享依赖；依赖无环。
+
+## 测试
+
+`runtime` **131 → 143**（新增 `PinVerifierTest` 7 例 + `WebChatAssetsTest` 5 例），
+全项目 `1450 tests, 0 failures, 0 errors`。

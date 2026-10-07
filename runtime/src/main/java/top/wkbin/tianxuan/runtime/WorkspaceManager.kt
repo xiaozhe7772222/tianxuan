@@ -137,14 +137,7 @@ class WorkspaceManager(
         null,
     )
     fun observeProjects(): Flow<List<WorkspaceProject>> = workspaceDao.observeAll().map { entities ->
-        val projectPaths = entities.mapNotNull { runCatching { File(it.path).canonicalPath }.getOrNull() }.toSet()
-        val filtered = entities.filter { entity ->
-            val entityCanonical = runCatching { File(entity.path).canonicalPath }.getOrNull() ?: return@filter true
-            projectPaths.none { otherPath ->
-                otherPath != entityCanonical && otherPath.startsWith(entityCanonical + File.separator)
-            }
-        }
-        filtered.mapNotNull(::projectFromEntity)
+        dropParentDirectories(entities).mapNotNull(::projectFromEntity)
     }.flowOn(Dispatchers.IO)
 
     suspend fun listProjects(): List<WorkspaceProject> = withContext(Dispatchers.IO) {
@@ -165,18 +158,33 @@ class WorkspaceManager(
         // 先收集所有有效实体，再过滤掉作为其他项目父目录的实体
         // （避免嵌套路径创建项目时，父目录被误注册为独立项目）
         val allEntities = workspaceDao.listAll().filter { it.name in known || File(it.path).isDirectory }
-        val projectPaths = allEntities.mapNotNull { runCatching { File(it.path).canonicalPath }.getOrNull() }.toSet()
-        val filtered = allEntities.filter { entity ->
-            val entityCanonical = runCatching { File(entity.path).canonicalPath }.getOrNull() ?: return@filter true
-            // 如果存在其他项目的路径以此实体路径为前缀，则此实体是父目录，应过滤掉
+        dropParentDirectories(allEntities)
+            .filter { entity -> File(entity.path).isDirectory }
+            .sortedBy { it.name.lowercase() }
+            .mapNotNull(::projectFromEntity)
+    }
+
+    /**
+     * 丢掉「别的项目的父目录」那些实体：嵌套路径创建项目时，父目录会被顺带
+     * 注册成一条实体，不剔除就会在列表里多出一个指向父目录的假项目。
+     *
+     * 原先 observeProjects 与 listProjects 各写了一份逐字相同的实现，现合并——
+     * 两处口径必须一致，否则列表流与一次性查询会给出不同结果。
+     *
+     * canonicalPath 取不到的实体一律保留：那通常意味着目录暂时不可访问，
+     * 此时宁可多显示，也不要凭空隐藏用户的项目。
+     */
+    private fun dropParentDirectories(entities: List<WorkspaceEntity>): List<WorkspaceEntity> {
+        val projectPaths = entities
+            .mapNotNull { runCatching { File(it.path).canonicalPath }.getOrNull() }
+            .toSet()
+        return entities.filter { entity ->
+            val entityCanonical = runCatching { File(entity.path).canonicalPath }.getOrNull()
+                ?: return@filter true
             projectPaths.none { otherPath ->
                 otherPath != entityCanonical && otherPath.startsWith(entityCanonical + File.separator)
             }
         }
-        filtered
-            .filter { entity -> File(entity.path).isDirectory }
-            .sortedBy { it.name.lowercase() }
-            .mapNotNull(::projectFromEntity)
     }
 
     suspend fun createProject(
@@ -216,7 +224,7 @@ class WorkspaceManager(
             val prefix = if (storage == WorkspaceStorage.INTERNAL) "/workspace/" else "/sdcard/"
             val requested = directoryPath.trim().replace('\\', '/').removePrefix(prefix).trim('/')
             val relative = requested.ifBlank { safeName }
-            require(relative.split('/').none { it.isBlank() || it == "." || it == ".." }) { "关联目录包含无效路径" }
+            requireValidRelativePath(relative)
             val directory = File(base, relative).canonicalFile
             check(isInside(base.canonicalFile, directory) && directory != base.canonicalFile) { "关联目录越界" }
             val duplicate = workspaceDao.listAll().any {
@@ -481,6 +489,19 @@ class WorkspaceManager(
         candidate.absolutePath == root.absolutePath ||
             candidate.absolutePath.startsWith(root.absolutePath + File.separator)
 
+    /**
+     * 校验「相对目录」不含空段、`.` 或 `..`。
+     *
+     * 「关联到已有目录」这条规则原先在两个入口各写了一份（内部沙盒 / 共享空间），
+     * 且已开始漂移（一处 `base.canonicalFile`、一处 `base`）。合并为一份：
+     * 同一规则写两遍、其中一份悄悄改坏，正是 unpackApk 漏掉解压上限的成因。
+     */
+    private fun requireValidRelativePath(relative: String) {
+        require(relative.split('/').none { it.isBlank() || it == "." || it == ".." }) {
+            "关联目录包含无效路径"
+        }
+    }
+
     private fun projectFromEntity(entity: WorkspaceEntity): WorkspaceProject? {
         val directory = File(entity.path)
         if (!directory.isDirectory) return null
@@ -592,7 +613,7 @@ class WorkspaceManager(
             check(base.isDirectory || base.mkdirs()) { "内部沙盒目录不可用" }
             val requested = directoryPath.trim().replace('\\', '/').removePrefix("/workspace/").trim('/')
             val relative = requested.ifBlank { safeName }
-            require(relative.split('/').none { it.isBlank() || it == "." || it == ".." }) { "关联目录包含无效路径" }
+            requireValidRelativePath(relative)
             val directory = File(base, relative).canonicalFile
             check(isInside(base, directory) && directory != base) { "关联目录越界" }
             val duplicate = workspaceDao.listAll().any {
@@ -657,18 +678,10 @@ class WorkspaceManager(
                             "无法创建目录：${entry.name}"
                         }
                         target.outputStream().buffered().use { output ->
-                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                            var entryBytes = 0L
-                            while (true) {
-                                val read = zip.read(buffer)
-                                if (read < 0) break
-                                entryBytes += read
-                                totalBytes += read
-                                require(entryBytes <= MAX_ARCHIVE_ENTRY_BYTES) { "压缩包单个文件过大：${entry.name}" }
-                                require(totalBytes <= MAX_ARCHIVE_TOTAL_BYTES) { "压缩包解压后体积过大" }
-                                output.write(buffer, 0, read)
-                            }
+                            val copied = copyCapped(zip, output, entry.name)
+                            totalBytes += copied
                         }
+                        require(totalBytes <= MAX_ARCHIVE_TOTAL_BYTES) { "压缩包解压后体积过大" }
                     }
                     zip.closeEntry()
                 }
@@ -854,12 +867,19 @@ class WorkspaceManager(
         )
     }
 
-    /** 用标准 ZIP 读取器把 APK 逐条目解包到 [unpackedDir]（防 zip-slip 路径穿越）。 */
-    private fun unpackApk(apkFile: File, unpackedDir: File) {
+    /** 用标准 ZIP 读取器把 APK 逐条目解包到 [unpackedDir]（防 zip-slip、防解压炸弹）。 */
+    internal fun unpackApk(apkFile: File, unpackedDir: File) {
         val unpackedCanonical = unpackedDir.canonicalFile
+        // 上限与 extractProjectArchive 共用同一组常量：此前这里只防了路径穿越，
+        // 没有数量/体积上限，而导入的 APK 是**用户自选的任意文件**——
+        // 一个百 KB 级的包就能声明 GB 级解压体积，一路写到磁盘满或 OOM。
+        var entryCount = 0
+        var totalBytes = 0L
         java.util.zip.ZipFile(apkFile).use { zip ->
             zip.entries().asSequence().forEach { entry ->
                 if (entry.isDirectory) return@forEach
+                entryCount++
+                require(entryCount <= MAX_ARCHIVE_ENTRIES) { "APK 文件数量过多" }
                 val rawName = entry.name.replace('\\', '/')
                 // 防 zip-slip：拒绝绝对路径与 .. 穿越
                 if (rawName.startsWith("/") || rawName.split('/').any { it == ".." }) return@forEach
@@ -867,98 +887,33 @@ class WorkspaceManager(
                 if (!isInside(unpackedCanonical, target.canonicalFile)) return@forEach
                 target.parentFile?.mkdirs()
                 zip.getInputStream(entry).use { input ->
-                    target.outputStream().use { output -> input.copyTo(output) }
+                    target.outputStream().buffered().use { output ->
+                        totalBytes += copyCapped(input, output, entry.name)
+                    }
                 }
+                require(totalBytes <= MAX_ARCHIVE_TOTAL_BYTES) { "APK 解包后体积过大" }
             }
         }
     }
 
-    /** 生成逆向工作流指引 README，衔接天玄内置的 jadx / apktool / 逆向 MCP 能力。 */
-    private fun writeReverseReadme(
-        projectDir: File,
-        name: String,
-        apkFileName: String,
-        unpackedDir: File,
-        sourceLabel: String,
-    ) {
-        val entryCount = unpackedDir.walkTopDown().count { it.isFile }
-        File(projectDir, "REVERSE.md").writeText(
-            """
-            # $name · APK 逆向工程
-
-            > 来源：$sourceLabel
-            > 导入时间：${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date())}
-
-            ## 工程结构
-
-            | 路径 | 说明 |
-            | :--- | :--- |
-            | `$apkFileName` | 原始安装包（未改动） |
-            | `unpacked/` | 第一层 ZIP 解包产物（$entryCount 个文件）：`classes.dex`、`resources.arsc`、`AndroidManifest.xml`（二进制 AXML）、`res/`、`assets/`、`lib/` 等 |
-            | `apk-info.properties` | 来源与元数据 |
-
-            ## 下一步：在天玄终端 / Agent 中继续深挖
-
-            沙箱内已内置逆向工具链（Android & 移动全栈开发套件 或 apktool 套件装配后可用）：
-
-            ```bash
-            # 1) DEX -> Java 源码（推荐，可读性最好）
-            jadx -d java-src "$apkFileName"
-
-            # 2) 完整解包资源 + Smali（可回编译）
-            apktool d "$apkFileName" -o apktool-out
-            #   回编译：apktool b apktool-out -o rebuilt.apk
-
-            # 3) 二进制清单解码（配合 apktool 产物）
-            #    aapt dump badging "$apkFileName"   # 包名 / 版本 / 权限
-            #    aapt dump xmltree "$apkFileName" AndroidManifest.xml
-            ```
-
-            Agent 对话中还可启用内置 **Android 逆向 MCP 服务**（`mcp_apktool`，在 MCP 设置中开启）：
-            `decode_apk` / `analyze_manifest` / `extract_strings` / `search_smali` / `build_apk` / `sign_apk`。
-
-            ## 分析关注点
-
-            - **AndroidManifest.xml**：四大组件导出状态、权限声明、Application 类
-            - **classes.dex**：核心业务逻辑（jadx 反编译后检索 URL / 密钥 / 加解密特征）
-            - **lib/**：native .so（可用 IDA / 玄星逆核 SOMCP 深度分析）
-            - **assets/** 与 **res/**：内置资源、配置文件、可能存在的加固壳特征
-
-            > 提示：如果打开 `unpacked/AndroidManifest.xml` 是乱码，属正常现象（AXML 二进制格式），
-            > 用 `apktool d` 或 `aapt dump xmltree` 解码即可。
-
-            ## 识别加固壳（jadx 打开看不到真实代码时）
-
-            若 `unpacked/classes.dex` 反编译后只有壳的 stub 加载器，说明 APK 被加固。看 `lib/` 下的 so 名最快定位厂商：
-
-            | 特征 so | 加固厂商 |
-            | :--- | :--- |
-            | `libjiagu.so` / `libjiagu_art.so` | **360 加固**（入口 `com.stub.StubApp`） |
-            | `libDexHelper.so` / `libSecShell.so` / `libsecexe.so` | **梆梆（SecNeo/Bangcle）**（入口 `com.secneo.apkwrapper.ApplicationWrapper`） |
-            | `libshellx-super*.so` / `libtup.so` / `libexec.so` | **腾讯乐固 / 御安全**（`com.tencent.StubShell`） |
-            | `libnesec.so` | **网易易盾**（`com.netease.nis.wrapper`） |
-            | `ijiami.ajm` / `libexecmain.so` / `assets/ijm_lib/` | **爱加密**（入口 `s.h.e.l.l.S`） |
-            | `libbaiduprotect.so` / `assets/baiduprotect*` | **百度加固** |
-            | `libzuma.so` / `assets/qihoo/` | **阿里聚安全** |
-            | `libddog.so` / `libchaosvmp.so` | **娜迦（Nagain，VMP 壳）** |
-            | `libx3g.so` | **顶像** |
-            | `libkwscmm.so` / `libkwsgmain.so` | **几维** |
-            | `libnqshield.so` / `libmobisec.so` / `libkiroro.so` | 网秦 / 阿里旧版 / Kiro 等 |
-
-            辅助判据：`assets/` 下的特征文件（`ijiami.dat`、`bangcleplugin/`、`libjiagu*`、`appsealing*`），以及 AndroidManifest 入口 `android:name`。
-
-            ## 遇到加固壳：脱壳指引
-
-            | 壳级别 | 特征 | 脱壳方案 |
-            | :--- | :--- | :--- |
-            | **一代壳**（整体 dex 加密） | jadx 只能看到 stub | **通用脱壳**：FRIDA-DEXDump（`frida -U -f 包名 -l frida-dexdump.js`）、BlackDex / FullDump（免 root 一键）、MT 管理器脱壳插件 |
-            | **二代壳**（方法抽取 / 函数抽取） | 方法体运行时回填 | **主动调用脱壳**：FART / Youpk / 反射大师（定制 ROM 或 Xposed 级框架触发每个方法回填后再 dump） |
-            | **VMP 壳**（指令虚拟化，如娜迦 chaosvmp） | 代码被虚拟化保护 | 极难整体脱，通常只能**动态调试关键逻辑**（Frida hook / Unidbg 模拟执行） |
-
-            脱壳后处理：dump 出的 `classesN.dex` 可能头部/校验被破坏 → 修复 dex header 后再 `jadx` 反编译；若要改逻辑，多数壳允许在原 APK 对应 smali/so 上 patch 后重打包。
-            """.trimIndent() + "\n",
-            Charsets.UTF_8,
-        )
+    /**
+     * 把 [input] 逐块拷进 [output]，撞上单文件上限即抛错；返回拷入的字节数，
+     * 总体积额度由调用方累加后自行判定（那是**整包**额度，不能每文件各算）。
+     *
+     * 这条循环原本只写在 extractProjectArchive 里，unpackApk 那条路径完全没有，
+     * 而 APK 是用户自选的任意文件。两处共用一份实现，后续不会各改各的。
+     */
+    private fun copyCapped(input: java.io.InputStream, output: java.io.OutputStream, entryName: String): Long {
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var entryBytes = 0L
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            entryBytes += read
+            require(entryBytes <= MAX_ARCHIVE_ENTRY_BYTES) { "压缩包单个文件过大：$entryName" }
+            output.write(buffer, 0, read)
+        }
+        return entryBytes
     }
 
     /**

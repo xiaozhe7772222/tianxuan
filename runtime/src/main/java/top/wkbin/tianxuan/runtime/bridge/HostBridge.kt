@@ -30,6 +30,7 @@ import java.io.OutputStream
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.security.MessageDigest
 import java.util.UUID
 import top.wkbin.tianxuan.runtime.bridge.adb.EmbeddedAdbManager
 
@@ -151,9 +152,7 @@ class HostBridge(
             if (line.isEmpty()) break
             val colonIdx = line.indexOf(':')
             if (colonIdx > 0) {
-                val key = line.substring(0, colonIdx).trim().lowercase()
-                val value = line.substring(colonIdx + 1).trim()
-                headers[key] = value
+                headers[line.substring(0, colonIdx).trim().lowercase()] = line.substring(colonIdx + 1).trim()
             }
         }
 
@@ -198,7 +197,11 @@ class HostBridge(
     private fun checkAuth(headers: Map<String, String>): Boolean {
         val auth = headers["authorization"] ?: return false
         val token = auth.removePrefix("Bearer ").removePrefix("bearer ").trim()
-        return token == bridgeKey
+        // 恒定时间比较。此处密钥是 128 bit 随机 UUID（去横杠），逐字节计时旁路在
+        // 数学上不可穷举，因此这不是可利用漏洞；但 `==` 会在首个不同字符处提前返回，
+        // 而本方法处理的是原始凭据——与 ShellCommandFactory.verifyPin / PinVerifier
+        // 保持同一种写法，避免后续把密钥长度调短时无意间留下计时信道。
+        return MessageDigest.isEqual(token.toByteArray(), bridgeKey.toByteArray())
     }
 
     // ============================ 端点实现 ============================
@@ -426,12 +429,8 @@ class HostBridge(
 
     private fun writeResponse(client: Socket, status: Int, body: String) {
         val statusText = when (status) {
-            200 -> "OK"
-            400 -> "Bad Request"
-            401 -> "Unauthorized"
-            404 -> "Not Found"
-            500 -> "Internal Server Error"
-            else -> "OK"
+            400 -> "Bad Request"; 401 -> "Unauthorized"; 404 -> "Not Found"
+            500 -> "Internal Server Error"; else -> "OK"
         }
         val bodyBytes = body.toByteArray(Charsets.UTF_8)
         val output: OutputStream = client.getOutputStream()

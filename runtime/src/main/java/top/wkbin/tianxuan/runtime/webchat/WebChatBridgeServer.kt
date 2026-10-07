@@ -180,24 +180,28 @@ class WebChatBridgeServer(
     private inner class StaticAssetHandler : AndroidHttpHandler {
         override fun handle(exchange: AndroidHttpExchange) {
             val path = exchange.requestURI.path.removePrefix("/").trimStart('/')
-            val assetPath = if (path.isBlank() || !hasFileExtension(path)) "webchat/index.html" else "webchat/$path"
+            // MIME 表同时充当「是否静态资源」的判据：命中直取，未知扩展名 404，
+            // 空路径与前端路由回落 index.html
+            val mime = WebChatAssets.mimeTypeOrNull(path)
+            val assetPath = if (mime != null) "webchat/$path" else "webchat/index.html"
             val stream: InputStream = runCatching { context.assets.open(assetPath) }.getOrElse {
-                if (hasFileExtension(path)) {
+                if (mime != null) {
                     sendText(exchange, 404, "资源不存在")
                     return
                 }
                 context.assets.open("webchat/index.html")
             }
-            stream.use { sendResponse(exchange, 200, getMimeType(assetPath), it.readBytes()) }
+            stream.use { sendResponse(exchange, 200, WebChatAssets.mimeTypeOrNull(assetPath) ?: WebChatAssets.DEFAULT_MIME, it.readBytes()) }
         }
     }
 
     private inner class SessionBootstrapHandler : AndroidHttpHandler {
         override fun handle(exchange: AndroidHttpExchange) = launchRequest(exchange) {
             if (handlePreflight(exchange)) return@launchRequest
-            val token = requestJson(exchange)["token"]?.jsonPrimitive?.content.orEmpty()
-            if (token != _status.value.pinCode) sendJson(exchange, 401, errorJson("配对码不正确"))
-            else sendJson(exchange, 200, buildJsonObject { put("authenticated", true) })
+            // 与 isAuthenticated 共用恒定时间比对（见 PinVerifier），两条路径不分叉
+            val token = requestJson(exchange)["token"]?.jsonPrimitive?.content
+            if (PinVerifier.matches(token, _status.value.pinCode)) sendJson(exchange, 200, buildJsonObject { put("authenticated", true) })
+            else sendJson(exchange, 401, errorJson("配对码不正确"))
         }
     }
 
@@ -520,7 +524,7 @@ class WebChatBridgeServer(
     private fun isAuthenticated(exchange: AndroidHttpExchange): Boolean {
         val token = getQueryParam(exchange, "token")
             ?: exchange.requestHeaders.getFirst("Authorization")?.removePrefix("Bearer ")
-        return token != null && token == _status.value.pinCode
+        return PinVerifier.matches(token, _status.value.pinCode)
     }
 
     private fun requireAuthenticated(exchange: AndroidHttpExchange): Boolean {
@@ -632,17 +636,6 @@ class WebChatBridgeServer(
         (context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager)?.cancel(NOTIFICATION_ID)
     }
 
-    private fun getMimeType(path: String): String = when {
-        path.endsWith(".html") -> "text/html; charset=utf-8"
-        path.endsWith(".js") || path.endsWith(".mjs") -> "application/javascript; charset=utf-8"
-        path.endsWith(".css") -> "text/css; charset=utf-8"
-        path.endsWith(".json") -> "application/json; charset=utf-8"
-        path.endsWith(".svg") -> "image/svg+xml"
-        path.endsWith(".png") -> "image/png"
-        else -> "application/octet-stream"
-    }
-
-    private fun hasFileExtension(path: String): Boolean = path.substringAfterLast('/', "").contains('.')
     private fun generatePin(): String = (100000..999999).random().toString()
 
     private fun resolveLocalIp(): String = runCatching {

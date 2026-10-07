@@ -27,7 +27,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import top.wkbin.tianxuan.core.datastore.FtpPreferences
-import top.wkbin.tianxuan.core.datastore.SshPreferences
 import top.wkbin.tianxuan.core.model.RuntimeState
 import top.wkbin.tianxuan.runtime.ftp.AndroidFtpServer
 import top.wkbin.tianxuan.runtime.ftp.FtpServerConfig
@@ -48,7 +47,6 @@ class FtpServiceManager(
     private val context: Context,
     private val linuxRuntime: LinuxRuntime,
     private val preferences: FtpPreferences,
-    private val sshPreferences: SshPreferences,
 ) {
     private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val serviceMutex = Mutex()
@@ -161,9 +159,20 @@ class FtpServiceManager(
 
             val port = preferences.port(distroId).first()
             val username = preferences.username(distroId).first()
-            val ftpPassword = preferences.readPassword(distroId)?.ifBlank { null }
-            val sshPassword = sshPreferences.readPassword(distroId)?.ifBlank { null }
-            val password = ftpPassword ?: sshPassword
+            // 安全边界：FTP 只认 FTP 自己那把密码，绝不回落 SSH 密码。
+            //
+            // 此前是 `ftpPassword ?: sshPassword`，问题有三层：
+            // 1. 跨服务凭据复用——一处 SSH 密码泄漏等于同时失守 FTP，而 FTP 是
+            //    明文协议（本实现连 AUTH/TLS 都不支持），泄漏面远大于 SSH。
+            // 2. 界面与行为相反——设置页在未单独设密码时显示「免密登录，客户端密码
+            //    留空或填任意内容即可」，但用户一旦配过 SSH 密码，FTP 实际要求的是
+            //    那把 SSH 密码；照着界面操作只会一直 530，且无任何可排查线索。
+            // 3. 不可观测——FtpPreferences.passwordConfigured 只看 FTP 键，
+            //    所以 UI 永远不可能提示"正在使用 SSH 密码"。
+            //
+            // 免密访问有且只有一个显式入口：anonymousEnabled。
+            // 与 FtpSession 的认证语义（AndroidFtpServer.kt 内 handlePass 的同类注释）对齐。
+            val password = preferences.readPassword(distroId)?.ifBlank { null }
             val anonymous = preferences.anonymousEnabled(distroId).first()
             val readOnly = preferences.readOnly(distroId).first()
 

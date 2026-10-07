@@ -17,6 +17,18 @@ for f in "$OFFLINE"/*.txplugin; do
   ln -sfn "$f" "$link"
   added=$((added + 1))
 done
-total="$(find "$PDIR" -maxdepth 1 -type l -name '*.txplugin' | wc -l)"
-bytes="$(python3 -c 'import os,sys; d=sys.argv[1]; print(sum(os.path.getsize(os.path.join(d,n)) for n in os.listdir(d) if n.endswith(".txplugin")))' "$PDIR")"
+# -xtype f：跟随软链后仍是普通文件，即排除悬空链接。-type l 会把悬空的一项
+# 也算成插件，报出的数量比实际可下载的多。
+total="$(find "$PDIR" -maxdepth 1 -type l -xtype f -name '*.txplugin' | wc -l)"
+# 只统计**可读**的包：pdir 里是软链，离线包被清理或下载失败时有链接会悬空。
+# 直接喂给 os.path.getsize 会抛 FileNotFoundError，而本脚本是 set -euo pipefail，
+# 于是「补软链」这件已经成功的事会以失败收场，误导排障。跳过不可读项即可。
+# 与 tianxuan_dist.py 的 _serve_plugins 保持一致：那边也用 os.path.isfile 过滤。
+bytes="$(python3 -c '
+import os, sys
+d = sys.argv[1]
+print(sum(os.path.getsize(os.path.join(d, n))
+          for n in os.listdir(d)
+          if n.endswith(".txplugin") and os.path.isfile(os.path.join(d, n))))
+' "$PDIR")"
 echo "linked_new=$added plugins=$total bytes=$bytes"

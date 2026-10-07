@@ -260,19 +260,22 @@ fun FtpSettingsScreen(
                         onClick = { showUsernameDialog = true },
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    // 文案必须与实际鉴权一致：FtpServiceManager 只采用 FTP 自己的密码，
+                    // 不回落 SSH 密码（否则「留空即可」的提示会在配过 SSH 密码后变成 530）。
+                    // 免密只发生在设为「允许匿名访问」时，故文案里必须点明这一点。
                     val passwordSubtitle = if (settings.passwordConfigured) {
                         "密码已单独配置并加密保存，点击修改或清除"
-                    } else if (settings.sshPasswordConfigured) {
-                        "未单独设置，已自动使用 SSH 登录密码"
+                    } else if (settings.anonymousEnabled) {
+                        "未设置密码；已开启匿名访问，无需密码即可登录"
                     } else {
-                        "未设置密码（免密登录，客户端密码留空或填任意内容即可）"
+                        "未设置密码，且未开启匿名访问，外部客户端将无法登录；点击此处可设置密码"
                     }
                     val passwordValue = if (settings.passwordConfigured) {
                         "已设置"
-                    } else if (settings.sshPasswordConfigured) {
-                        "同 SSH 密码"
+                    } else if (settings.anonymousEnabled) {
+                        "免密（匿名）"
                     } else {
-                        "免密"
+                        "未设置"
                     }
                     SettingsRow(
                         icon = RuntimeIconName.Key,

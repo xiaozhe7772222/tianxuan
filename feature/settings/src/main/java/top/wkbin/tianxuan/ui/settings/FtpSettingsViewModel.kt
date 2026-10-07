@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import top.wkbin.tianxuan.core.datastore.FtpPreferences
-import top.wkbin.tianxuan.core.datastore.SshPreferences
 import top.wkbin.tianxuan.runtime.FtpServiceManager
 import top.wkbin.tianxuan.runtime.LinuxRuntime
 import top.wkbin.tianxuan.runtime.SshServiceManager
@@ -29,7 +28,6 @@ data class FtpSettingsUiState(
     val anonymousEnabled: Boolean = false,
     val readOnly: Boolean = false,
     val passwordConfigured: Boolean = false,
-    val sshPasswordConfigured: Boolean = false,
 ) {
     val connectionHost: String
         get() = SshServiceManager.localIpv4Address() ?: "<设备局域网IP>"
@@ -53,7 +51,6 @@ class FtpSettingsViewModel(
     private val context: Context,
     private val linuxRuntime: LinuxRuntime,
     private val preferences: FtpPreferences,
-    private val sshPreferences: SshPreferences,
     private val manager: FtpServiceManager,
 ) : ViewModel() {
     val serviceState = manager.state
@@ -83,8 +80,6 @@ class FtpSettingsViewModel(
                 )
             }.combine(preferences.passwordConfigured(distroId)) { state, passwordConfigured ->
                 state.copy(passwordConfigured = passwordConfigured)
-            }.combine(sshPreferences.passwordConfigured(distroId)) { state, sshPasswordConfigured ->
-                state.copy(sshPasswordConfigured = sshPasswordConfigured)
             }
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, FtpSettingsUiState())
