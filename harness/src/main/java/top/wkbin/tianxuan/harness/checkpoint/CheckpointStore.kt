@@ -69,12 +69,22 @@ class CheckpointStore() {
         var lastTurn = -1
     }
 
-    /** 开启一个新的用户轮次 checkpoint，并关闭上一轮（若有）。 */
+    /**
+     * 开启一个新的用户轮次 checkpoint，并关闭上一轮（若有）。
+     *
+     * 轮号在**开轮时**即分配并立刻提交，而不是等关轮时由"有写入"的轮次提交：
+     * 只读轮（问一句、模型只回文本、无 write/edit）不产生 checkpoint，此时轮号若只在
+     * 关轮且有写入时才递增，下一轮就会**复用**同一轮号。而 [planCodeRewind] 按轮号比较、
+     * [anchorMessageIdOf] 按轮号取锚点、UI 按 `anchorMessageId` 定位后拿到
+     * [CheckpointMeta.turn]——三处口径不一致，撤回会**漏掉**本该撤销那一轮的改动。
+     */
     @Synchronized
     fun beginTurn(sessionId: String, prompt: String, anchorMessageId: String? = null) {
         val state = stateOf(sessionId)
         closeTurn(sessionId, state)
         state.activeTurn = state.lastTurn + 1
+        // 先提交轮号再开轮：空轮同样占用轮号，保证 lastTurn 单调、不与其他轮撞号。
+        state.lastTurn = state.activeTurn
         state.activePrompt = prompt.ifBlank { "（空白输入）" }
         state.activeAnchorMessageId = anchorMessageId
         state.active = LinkedHashMap()
@@ -84,8 +94,7 @@ class CheckpointStore() {
     /** 记录某路径在该轮"触碰前"的内容；无活动轮或路径已记录时忽略。 */
     @Synchronized
     fun capture(sessionId: String, path: String, before: String?): Boolean {
-        val state = sessions[sessionId] ?: return false
-        val active = state.active ?: return false
+        val active = sessions[sessionId]?.active ?: return false
         if (path in active) return false
         active[path] = FileSnap(path, before)
         // rewind 之后智能体又开始写文件：撤销窗口关闭（再 undo 会覆盖新写入）
@@ -110,25 +119,22 @@ class CheckpointStore() {
      */
     @Synchronized
     fun captureAfterImage(sessionId: String, path: String, content: String): Boolean {
-        val state = sessions[sessionId] ?: return false
-        val active = state.active ?: return false
+        val active = sessions[sessionId]?.active ?: return false
         val snap = active[path] ?: return false
         active[path] = snap.copy(afterContent = content)
         return true
     }
 
     /**
-     * 某路径在本 store 记录中的**最后改动后凭据**：活动轮优先，其余按关闭轮新→旧取第一个。
+     * 某路径**最后改动后凭据**：活动轮优先，其余按关闭轮新→旧取第一个。
      * restore 的冲突检测用它判断"当前文件是否被外部改动过"；null = 无凭据（不检测）。
      */
     @Synchronized
     fun latestAfterImage(sessionId: String, path: String): String? {
         val state = stateOf(sessionId)
         state.active?.get(path)?.afterContent?.let { return it }
-        for (checkpoint in state.checkpoints.asReversed()) {
-            checkpoint.files.firstOrNull { it.path == path }?.afterContent?.let { return it }
-        }
-        return null
+        return state.checkpoints.asReversed()
+            .firstNotNullOfOrNull { it.files.firstOrNull { snap -> snap.path == path }?.afterContent }
     }
 
     /** 强制关闭当前活动轮（无触碰则丢弃空轮）。 */
@@ -137,14 +143,13 @@ class CheckpointStore() {
         sessions[sessionId]?.let { closeTurn(sessionId, it) }
     }
 
-    /** 会话删除/重建时清理。 */
+    // 删除走同一单线程执行器排队：先于它的待写任务先落盘、随后被整体删除——
+    // 消除"异步写在 dropSession 之后执行、write() 的 mkdirs 复活已删目录"的竞态
     @Synchronized
     fun dropSession(sessionId: String) {
         sessions.remove(sessionId)
         restoredSessions.remove(sessionId)
         rewindUndoRecords.remove(sessionId)
-        // 删除走同一单线程执行器排队：先于它的待写任务先落盘、随后被整体删除——
-        // 消除"异步写在 dropSession 之后执行、write() 的 mkdirs 复活已删目录"的竞态
         persistence?.let { disk -> diskWriteExecutor.execute { runCatching { disk.delete(sessionId) } } }
     }
 
@@ -168,21 +173,19 @@ class CheckpointStore() {
     fun planCodeRewind(sessionId: String, turn: Int): List<FileSnap> {
         val state = stateOf(sessionId)
         val open = state.active
-        // 轮号全局单调（活动轮 = activeTurn = lastTurn+1），MAX_KEPT 裁剪或空轮缺号后
-        // 与 checkpoints.size/下标错位；必须按轮号比较，否则目标轮/活动轮会被错误纳入或漏掉。
+        // 轮号全局单调，MAX_KEPT 裁剪或空轮缺号后会与 checkpoints.size/下标错位；
+        // 必须按轮号比较，否则目标轮/活动轮会被错误纳入或漏掉。
         val newestClosedTurn = state.checkpoints.lastOrNull()?.turn ?: -1
         val newestTurn = if (open != null) maxOf(newestClosedTurn, state.activeTurn) else newestClosedTurn
         if (turn < 0 || turn > newestTurn) return emptyList()
         val merged = LinkedHashMap<String, FileSnap>()
         for (checkpoint in state.checkpoints) {
             if (checkpoint.turn >= turn) {
-                for (snap in checkpoint.files) {
-                    merged.putIfAbsent(snap.path, snap)
-                }
+                for (snap in checkpoint.files) merged.putIfAbsent(snap.path, snap)
             }
         }
         // 当前（尚未关闭）的轮次也纳入回滚范围：用 activeTurn 判断而非 checkpoints.size
-        //（活动轮轮号是 lastTurn+1，裁剪后远大于 checkpoints.size，原条件会漏掉当前进行轮的改动）
+        //（活动轮轮号是 lastTurn+1，裁剪后远大于 size，原条件会漏掉当前进行轮的改动）
         if (open != null && turn <= state.activeTurn) {
             for (snap in open.values) merged.putIfAbsent(snap.path, snap)
         }
@@ -226,7 +229,8 @@ class CheckpointStore() {
             )
             state.checkpoints.add(checkpoint)
             while (state.checkpoints.size > MAX_KEPT) state.checkpoints.removeAt(0)
-            if (checkpoint.turn > state.lastTurn) state.lastTurn = checkpoint.turn
+            // 轮号已在 beginTurn 提交（含空轮），此处不再回写 lastTurn：既不重复提交，
+            // 也不至于在空轮时把"已分配但无 checkpoint"的轮号从单调序列里抹掉。
             // 异步落盘（checkpoint 不可变，可安全移交）：失败只放弃持久化不影响内存态
             persistence?.let { disk ->
                 diskWriteExecutor.execute { runCatching { disk.write(sessionId, checkpoint) } }

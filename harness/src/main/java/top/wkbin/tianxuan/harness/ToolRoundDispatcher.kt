@@ -1,6 +1,5 @@
 package top.wkbin.tianxuan.harness
 
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -32,48 +31,90 @@ class ToolRoundDispatcher() {
      * 用户每开一个新工作区就往这里塞一把永不移除的锁，长时间使用的设备上
      * 这张表只增不减，是一处按工作区数量线性增长的泄漏。
      *
-     * 回收策略见 [acquireLock] / [releaseLock]的引用计数，不能用 WeakReference：
+     * 回收策略见 [acquireLock] / [releaseLock] 的引用计数，不能用 WeakReference：
      * Mutex 与持有它的协程互相引用，只要还有在途等待者就不会被回收，而等待者
      * 可能长期挂在 BASE 的 1 小时超时上。
+     *
+     * **本表的一切读写都必须持有 [registrationLock]。** 表本身是普通
+     * `HashMap` 而非 `ConcurrentHashMap`，这是刻意的：
+     *
+     * 引用计数回收的死结在于「计数归零判定」与「移除表项」必须原子，否则
+     * 中间那段窗口里入场的持有者会拿到一把**已被删除**的锁，而随后的请求
+     * 会新建第二把——同一工作区被两把 Mutex 保护，并发保护静默失效。
+     * 早先的实现用 `ConcurrentHashMap.compute` 做「建锁 + 计数 +1」，靠
+     * `compute` 的分段锁保证那一步原子，再用 `remove(key, slot)` 的
+     * compare-and-remove 兜底删除；但这**掩盖不了**窗口依然存在：
+     * `compute` 与 `remove` 是两次独立的分段锁操作，中间可以插入别人的
+     * `compute`。补一个「事后撤销」也救不回来——被删的槽位计数已经不为零，
+     * 撤销与删除之间又有新的窗口，只会把竞态推给下一轮。
+     *
+     * 既然两把分段锁无法拼成一个原子区间，就换成**一把显式的对象锁**
+     * 覆盖整段读改写。代价是跨工作区的取锁/放锁会短暂串行，但那只是几次
+     * 哈希表操作（纳秒级），真正的互斥等待仍然发生在各自的 [LockSlot.mutex]
+     * 上，不会让一个工作区的长构建挡住其他工作区——这正是分片互斥要保住的性质。
      */
-    private val mutationMutexes = ConcurrentHashMap<String, LockSlot>()
+    private val mutationMutexes = HashMap<String, LockSlot>()
+
+    /** 保护 [mutationMutexes] 的注册表锁；只覆盖建表/计数/回收，不覆盖临界区。 */
+    private val registrationLock = Any()
 
     /**
      * 取一把作用域锁，并登记一次持有。
      *
      * 必须在 finally 里配对 [releaseLock]，否则计数永不归零、锁永不回收。
      * 这与「tryLock 后忘记 unlock」是同一类错误，只是发生在更隐蔽的地方。
+     *
+     * 「建锁」与「计数 +1」在 [registrationLock] 下一起完成。若分两步
+     * （先 getOrPut 再 increment），两个并发首次进入同一工作区的请求会各自
+     * 拿到 1，而实际有两个持有者——其中一个退出时就把锁删了，另一个仍在等锁，
+     * 于是并发保护静默失效。
      */
     private fun acquireLock(scopeKey: String): LockSlot {
         val key = scopeKey.trim().ifBlank { GLOBAL_SCOPE }
-        // compute 保证「建锁」与「计数 +1」原子完成。若分两步（先 getOrPut 再
-        // increment），两个并发首次进入同一工作区的请求会各自拿到 1，
-        // 而实际有两个持有者——其中一个退出时就把锁删了，另一个仍在等锁，
-        // 于是并发保护静默失效。
-        return mutationMutexes.compute(key) { _, existing ->
-            (existing ?: LockSlot()).also { it.holders++ }
-        }!!
-    }
-
-    /** 释放一次持有；计数归零时移除锁，让该作用域的条目不再常驻。 */
-    private fun releaseLock(scopeKey: String, slot: LockSlot) {
-        val last = synchronized(slot) {
-            slot.holders--
-            slot.holders <= 0
+        return synchronized(registrationLock) {
+            val existing = mutationMutexes[key]
+            if (existing != null) {
+                existing.holders++
+                existing
+            } else {
+                LockSlot(holders = 1).also { mutationMutexes[key] = it }
+            }
         }
-        if (!last) return
-        // 只能移除「key 仍指向本slot」的那一条。若期间该key 已被移除又新建
-        // （新持有者已入场），误删别人的锁会让两个持有者共用一个 Mutex——
-        // 那比不回收严重得多：并发保护会静默失效。
-        mutationMutexes.remove(scopeKey, slot)
     }
 
-    /** 一个作用域锁及其在途持有者计数。计数会在锁外被读，故用 volatile。 */
-    private class LockSlot {
-        val mutex = Mutex()
+    /**
+     * 释放一次持有；计数归零时从 [mutationMutexes] 移除该键，让作用域条目不再常驻。
+     *
+     * 「计数减一」与「归零则移除」在**同一个** [registrationLock] 区间内完成，
+     * 因此不存在「判定归零之后、执行移除之前」的窗口——任何并发入场者要么
+     * 在这段区间之前把计数加上去（于是归零不成立，不移除），要么在这段区间
+     * 之后看到键已消失并新建一把锁（而前一名持有者此刻已经彻底离场）。
+     * 两种次序都只有一个持有者集合，不会出现同一工作区两把锁。
+     *
+     * 表项的生命周期因此严格是「计数 0 ⇔ 不在表内」：不持有 [LockSlot.mutex]
+     * 的协程绝不会在表里留下计数不为零的孤儿槽位，也就无需任何事后撤销。
+     */
+    private fun releaseLock(scopeKey: String, slot: LockSlot) {
+        val key = scopeKey.trim().ifBlank { GLOBAL_SCOPE }
+        synchronized(registrationLock) {
+            slot.holders--
+            if (slot.holders <= 0 && mutationMutexes[key] === slot) {
+                mutationMutexes.remove(key)
+            }
+        }
+    }
 
-        @Volatile
-        var holders: Int = 0
+    /**
+     * 一个作用域锁及其在途持有者计数。
+     *
+     * [holders] 只在 [registrationLock] 下读写，故无需 volatile；
+     * 声明为普通字段是为了让「必须持锁访问」这一约束在编译期无可乘之机
+     * （volatile 会给人「随便读也安全」的错觉）。
+     */
+    private class LockSlot(
+        var holders: Int,
+    ) {
+        val mutex = Mutex()
     }
 
     /**
@@ -82,11 +123,15 @@ class ToolRoundDispatcher() {
      * 暴露它而不是让测试去反射私有字段：反射拿到的是实现细节，字段一改名
      * 测试就红，而这里本来就是一个稳定可观测的运行指标。
      */
-    fun activeScopeCount(): Int = mutationMutexes.size
+    fun activeScopeCount(): Int = synchronized(registrationLock) { mutationMutexes.size }
 
     /**
      * 按工作区串行执行变更类副作用。除本调度器外，审批恢复路径（被批准的
      * write/base/mcp 等）也必须经此方法取锁，否则会与并发会话的同工作区写入踩踏。
+     *
+     * [acquireLock] 返回的 slot 在本方法返回前始终在表内：只要计数不为零，
+     * 回收就不可能发生（见 [releaseLock]）。因此这里可以放心直接用它的 mutex，
+     * 不必再做事后确认。
      */
     suspend fun <T> withMutationLock(scopeKey: String, block: suspend () -> T): T {
         val key = scopeKey.trim().ifBlank { GLOBAL_SCOPE }

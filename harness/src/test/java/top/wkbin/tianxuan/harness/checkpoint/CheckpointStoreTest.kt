@@ -35,6 +35,59 @@ class CheckpointStoreTest {
     }
 
     @Test
+    fun `turn numbers stay monotonic across read-only turns`() {
+        // 只读轮（无 write/edit → 无 checkpoint）不得让后续轮号回退/复用：
+        // 轮号是 UI 定位 checkpoint 后回传给 planCodeRewind 的边界，撞号会让撤回漏掉整轮改动。
+        store.beginTurn("s", "p0")
+        store.capture("s", "a.txt", null)
+        store.beginTurn("s", "p1") // 只读轮：无 capture
+        store.beginTurn("s", "p2")
+        store.capture("s", "b.txt", "b2")
+        store.beginTurn("s", "p3") // 只读轮：无 capture
+        store.beginTurn("s", "p4")
+        store.capture("s", "c.txt", "c4")
+        store.beginTurn("s", "p5") // 关闭 turn4
+
+        val turns = store.checkpoints("s").map { it.turn }
+        assertEquals(listOf(0, 2, 4), turns)
+    }
+
+    @Test
+    fun `rewind after read-only turns still reverts the intended turn`() {
+        store.beginTurn("s", "p0")
+        store.capture("s", "a.txt", "a0")
+        store.beginTurn("s", "p1") // 只读轮
+        store.beginTurn("s", "p2")
+        store.capture("s", "a.txt", "a2")
+        store.capture("s", "b.txt", "b2")
+        store.beginTurn("s", "p3") // 只读轮
+
+        // 轮号 2 才是写 a.txt/b.txt 的那一轮；撤回它必须把两者都还原到该轮轮初内容。
+        val plan = store.planCodeRewind("s", 2).associate { it.path to it.content }
+        assertEquals("a2", plan["a.txt"])
+        assertEquals("b2", plan["b.txt"])
+
+        // 只读轮不产生 checkpoint，按它的轮号撤回时命中的是"第一个不早于该轮号"的有写入轮。
+        val fromReadOnlyTurn = store.planCodeRewind("s", 3).associate { it.path to it.content }
+        assertTrue("只读轮之后无任何写入，不应产生回滚项", fromReadOnlyTurn.isEmpty())
+    }
+
+    @Test
+    fun `anchor lookup works for read-only turns`() {
+        store.beginTurn("s", "p0", anchorMessageId = "m0")
+        store.capture("s", "a.txt", null)
+        store.beginTurn("s", "p1", anchorMessageId = "m1") // 只读轮
+        store.beginTurn("s", "p2", anchorMessageId = "m2")
+        store.capture("s", "b.txt", "b2")
+        store.beginTurn("s", "p3", anchorMessageId = "m3") // 关闭 turn2
+
+        // 只有产生 checkpoint 的轮才有锚点可查（无写入轮不落 checkpoint，属既有约定）。
+        assertEquals("m0", store.anchorMessageIdOf("s", 0))
+        assertEquals("m2", store.anchorMessageIdOf("s", 2))
+        assertEquals(null, store.anchorMessageIdOf("s", 1))
+    }
+
+    @Test
     fun `code rewind takes earliest snapshot per path starting from the target turn`() {
         // turn0: a.txt 不存在 → b.txt = "b0"
         store.beginTurn("s", "p0")

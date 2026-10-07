@@ -138,10 +138,12 @@ class ApprovalPolicyEngine(
                 "critical" -> ApprovalDecision(true, "critical", "浏览器操作涉及代码执行或读取敏感数据（Cookie/页面源码）。", summary)
                 else -> ApprovalDecision(true, "high", "MCP 工具可能访问外部服务或产生工作区之外的副作用。", summary)
             }
+            // 刻意不写 else：本 when 必须穷尽 HarnessTool 全部成员。新增成员若漏配策略，
+            // 编译器会报 "must be exhaustive"；写了 else 则被静默判为免审，成为免审后门。
             HarnessTool.READ, HarnessTool.MEMORY, HarnessTool.PLAN, HarnessTool.SCRATCHPAD,
             HarnessTool.HISTORY_SEARCH, HarnessTool.HISTORY_READ, HarnessTool.SUBAGENT, HarnessTool.LOAD_RULE,
-            HarnessTool.LOAD_SKILL, HarnessTool.RENDER_SURFACE,
-            HarnessTool.ASK_USER -> ApprovalDecision(false)
+            HarnessTool.LOAD_SKILL, HarnessTool.RENDER_SURFACE, HarnessTool.COMPRESS, HarnessTool.ASK_USER ->
+                ApprovalDecision(false)
         }
     }
 
@@ -173,14 +175,12 @@ class ApprovalPolicyEngine(
         } else {
             "process 仅允许查看（status / logs / list），不允许启动或停止进程。"
         }
-        HarnessTool.HOST -> {
-            val action = args["action"]?.jsonPrimitive?.content.orEmpty().trim().lowercase()
-            if (action in HOST_READ_ONLY_ACTIONS) {
+        HarnessTool.HOST ->
+            if (args["action"]?.jsonPrimitive?.content.orEmpty().trim().lowercase() in HOST_READ_ONLY_ACTIONS) {
                 null
             } else {
                 "宿主操作仅允许只读查询（status / settings_get / package_list / app_list / logcat / device_status / screen_observe），不允许改动真实 Android 系统。"
             }
-        }
         HarnessTool.MCP -> if (isReadOnlyMcpCall(args, rawToolName)) {
             null
         } else {

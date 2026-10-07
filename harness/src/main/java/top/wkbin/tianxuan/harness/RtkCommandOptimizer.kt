@@ -16,6 +16,13 @@ package top.wkbin.tianxuan.harness
 internal object RtkCommandOptimizer {
     private const val RTK_BINARY = "/opt/tianxuan/bin/rtk"
 
+    /**
+     * 承载原始命令的环境变量名。包装脚本只引用它，不内联命令文本——
+     * 这样命令里的任何引号、反斜杠、换行都不可能改变脚本的语法结构。
+     * 见 [wrapWithFallback] 的说明。
+     */
+    internal const val COMMAND_ENV = "TIANXUAN_AGENT_COMMAND"
+
     private val rtkEnvironment = mapOf(
         // Raw failure output can include project secrets and is already returned to the Agent.
         "RTK_TEE" to "0",
@@ -80,7 +87,7 @@ internal object RtkCommandOptimizer {
         if (!enabled || !isEligible(command)) return PreparedCommand(command)
         return PreparedCommand(
             commandLine = wrapWithFallback(command),
-            environment = rtkEnvironment,
+            environment = rtkEnvironment + (COMMAND_ENV to command),
         )
     }
 
@@ -109,26 +116,49 @@ internal object RtkCommandOptimizer {
         return isShortCluster && name.drop(1).any { "-$it" in flags }
     }
 
-    private fun wrapWithFallback(command: String): String {
-        val quotedCommand = shellQuote(command)
-        return """
-            if [ -x "$RTK_BINARY" ]; then
-                _tianxuan_rtk_rewritten="${'$'}("$RTK_BINARY" rewrite $quotedCommand 2>/dev/null)"
-                _tianxuan_rtk_status=${'$'}?
-                case "${'$'}_tianxuan_rtk_rewritten" in
-                    "rtk "*) ;;
-                    *) _tianxuan_rtk_status=1 ;;
-                esac
-                if [ "${'$'}_tianxuan_rtk_status" -eq 0 ] && [ "${'$'}(printf '%s' "${'$'}_tianxuan_rtk_rewritten" | wc -l)" -eq 0 ]; then
-                    eval "${'$'}_tianxuan_rtk_rewritten"
-                else
-                    $command
-                fi
+    /**
+     * 生成「有 RTK 就用改写、否则原样执行」的包装脚本。
+     *
+     * 关键约束：**生成的脚本文本里绝不能出现原始命令**。
+     *
+     * 曾经这里把 `$command` 直接插进 `else $command; fi` 与 `if [ -x ... ]` 两个分支。
+     * 原始命令只是「未经引号的文本」，它自带的引号会与包装脚本的语法互相干扰，
+     * 后果随命令内容而变，且都发生在最不该出错的地方——回退路径：
+     *
+     * - 命令含**未配对单引号**（`git commit -m 'fix: it's done'`、`rg "don't"`）时，
+     *   那个 `'` 会破坏 `else ...; fi` 的配对，整条命令以 shell 语法错误失败
+     *   （实测退出码 2），而不是去执行用户想跑的东西；
+     * - 更隐蔽的是 `$command` 也会污染**上游**的引号解析：`echo it's fine` 的 `'`
+     *   让 shell 把它之后的内容读成新字符串，`fi` 的配对随之错位，落进 else
+     *   分支被**无引号裸执行**，于是 `echo A; echo B` 输出字面量 `A; echo B`。
+     *
+     * 即使 `isEligible` 已经挡掉分号、管道等结构性元字符，也挡不住单/双引号——
+     * 而引号在真实命令里极常见（commit message、grep 模式、路径）。
+     *
+     * 修法是让脚本文本与命令内容彻底解耦：命令通过环境变量
+     * [COMMAND_ENV] 传入，脚本里只出现 `"$TIANXUAN_AGENT_COMMAND"`。命令文本
+     * 从此不再是脚本语法的一部分，无论含什么字符都不会改变脚本结构。
+     * 用环境变量而非位置参数，是因为命令执行层只接受 (脚本, 环境) 二元组，
+     * 没有 argv 通道可挂。
+     *
+     * 同时给两个执行分支补上 `eval`：原实现回退分支是 `$command` 裸展开，
+     * 单次分词后不再做引号/转义处理，本来就不等价于用户写的命令。
+     */
+    private fun wrapWithFallback(command: String): String = """
+        if [ -x "$RTK_BINARY" ]; then
+            _tianxuan_rtk_rewritten="${'$'}("$RTK_BINARY" rewrite "${'$'}$COMMAND_ENV" 2>/dev/null)"
+            _tianxuan_rtk_status=${'$'}?
+            case "${'$'}_tianxuan_rtk_rewritten" in
+                "rtk "*) ;;
+                *) _tianxuan_rtk_status=1 ;;
+            esac
+            if [ "${'$'}_tianxuan_rtk_status" -eq 0 ] && [ "${'$'}(printf '%s' "${'$'}_tianxuan_rtk_rewritten" | wc -l)" -eq 0 ]; then
+                eval "${'$'}_tianxuan_rtk_rewritten"
             else
-                $command
+                eval "${'$'}$COMMAND_ENV"
             fi
-        """.trimIndent()
-    }
-
-    private fun shellQuote(value: String): String = "'${value.replace("'", "'\"'\"'")}'"
+        else
+            eval "${'$'}$COMMAND_ENV"
+        fi
+    """.trimIndent()
 }

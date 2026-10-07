@@ -30,7 +30,10 @@ class AstronomyTest {
         assertEquals(28, Quadrant.entries.sumOf { it.mansions.size })
     }
 
-    /** 《淮南子·天文训》「星分度」：四象合计 365 度，箕宿带四分一，合周天 365¼ 度。 */
+    /**
+     * 《淮南子·天文训》「星分度」：东方 75¼（含箕宿所带四分一）、北方 98、
+     * 西方 80、南方 112，四象合计 365¼ 度，合周天。
+     */
     @Test
     fun degreesSumToOneFullCircle() {
         val eastern = Quadrant.AZURE_DRAGON.mansions.sumOf { it.degree.toDouble() }
@@ -38,7 +41,8 @@ class AstronomyTest {
         val western = Quadrant.WHITE_TIGER.mansions.sumOf { it.degree.toDouble() }
         val southern = Quadrant.VERMILION_BIRD.mansions.sumOf { it.degree.toDouble() }
 
-        // 原文作「东方七十五度」，而箕宿带四分一，故实为 75¼；其余三象皆为整数。
+        // 古籍原文作「东方七十五度」，而箕宿带四分一，故其数已含于 75¼ 之中；
+        // 其余三象皆为整数。四象相加即得周天 365¼，不再另加。
         assertEquals(75.25, eastern, 1e-6)
         assertEquals(98.0, northern, 1e-6)
         assertEquals(80.0, western, 1e-6)

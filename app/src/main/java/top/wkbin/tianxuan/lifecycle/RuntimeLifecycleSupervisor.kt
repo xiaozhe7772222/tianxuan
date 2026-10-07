@@ -28,6 +28,21 @@ import kotlinx.coroutines.flow.asStateFlow
  *
  * ## 线程安全
  * 内部 `holders` 集合由 `synchronized(this)` 保护，可安全地从任意线程调用。
+ *
+ * ## 持有者身份
+ * 集合里装的是**每次 acquire 生成的唯一 id**，而不是调用方传来的 [holderId]。
+ * 这一点是必需的，不是风格选择：
+ *
+ * 同一 [holderId] 被两处独立持有是常态。以 Agent 前台服务为例，
+ * [acquireLease] 在 `onStartCommand` 与后续运行态观察里都会调用，两次拿到的是
+ * 两个**不同的**租约句柄（`powerLease` 只记得住最后一个，早先那个句柄已经无人
+ * 引用）。若集合按裸 [holderId] 去重，第二个句柄 `close()` 会把第一个仍在使用
+ * 的持有一起抹掉——`holders` 变空 → 立刻 `releaseLocks()` 释放 WakeLock /
+ * WifiLock ——于是 Agent 推理或 PRoot 构建会在息屏后被系统冻结。
+ * 这正是本类注释开头声称要消除的那类竞态，只是换了个入口。
+ *
+ * 用唯一 id 而非直接改成计数器，是为了保住 [holderSnapshot] 的诊断价值：
+ * 它既给出「有几个在途持有」，也给出「分别是谁申请的」。
  */
 class RuntimeLifecycleSupervisor(
     private val context: Context,
@@ -37,8 +52,15 @@ class RuntimeLifecycleSupervisor(
     private val _isActive = MutableStateFlow(false)
     val isActive: StateFlow<Boolean> = _isActive.asStateFlow()
 
-    /** 活跃租约的 holderId 集合，所有访问必须持有对象锁。 */
-    private val holders = mutableSetOf<String>()
+    /**
+     * 活跃租约 → 申请方 holderId，所有访问必须持有对象锁。
+     *
+     * 键形如 `agent#3`（holderId + 自增序号），见类注释「持有者身份」。
+     */
+    private val holders = mutableMapOf<String, String>()
+
+    /** 租约序号，仅在持有对象锁时递增，用于生成全局唯一的持有 id。 */
+    private var nextHolderSeq = 0L
 
     /** 进程唯一 CPU 唤醒锁，防止息屏后 CPU 休眠冻结推理 / PRoot 进程。 */
     private var wakeLock: PowerManager.WakeLock? = null
@@ -55,16 +77,20 @@ class RuntimeLifecycleSupervisor(
      * 申请保活租约。
      *
      * - 首个租约申请时自动获取 WakeLock / WifiLock。
-     * - 同一 [holderId] 可重复申请（幂等）；释放时每个句柄独立计数，不因重复申请而双倍计算。
+     * - 每次调用都产生**独立的**持有：同一 [holderId] 重复申请会各自登记一条，
+     *   因此 `close()` 一个句柄只释放它自己那一次持有，不会误伤同名调用方仍在
+     *   使用的租约（见类注释「持有者身份」）。
      *
      * @param holderId 申请方标识，用于日志（如 "agent" / "workflow" / "runtime-foreground-service"）。
      * @return 租约句柄；调用 [ProcessingPowerLease.close] 释放。
      */
     fun acquireLease(holderId: String): ProcessingPowerLease {
+        val holderKey: String
         val totalHolders: Int
         synchronized(this) {
             val wasEmpty = holders.isEmpty()
-            holders.add(holderId)
+            holderKey = "$holderId#${nextHolderSeq++}"
+            holders[holderKey] = holderId
             if (wasEmpty) {
                 acquireLocks()
             }
@@ -80,7 +106,7 @@ class RuntimeLifecycleSupervisor(
                 synchronized(this@RuntimeLifecycleSupervisor) {
                     if (released) return
                     released = true
-                    holders.remove(holderId)
+                    holders.remove(holderKey)
                     if (holders.isEmpty()) {
                         releaseLocks()
                     }
@@ -94,8 +120,8 @@ class RuntimeLifecycleSupervisor(
     /** 当前活跃租约数（线程安全快照）。 */
     fun holderCount(): Int = synchronized(this) { holders.size }
 
-    /** 当前活跃租约 holderId 集合的快照（仅用于诊断/日志）。 */
-    fun holderSnapshot(): Set<String> = synchronized(this) { holders.toSet() }
+    /** 当前活跃申请方标识的快照（仅用于诊断/日志；同名持有会出现多次）。 */
+    fun holderSnapshot(): Set<String> = synchronized(this) { holders.values.toSet() }
 
     // ──────────────────────────────────────────────────────────────
     // 内部：锁管理

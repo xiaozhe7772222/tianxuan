@@ -30,10 +30,12 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 import android.net.Uri
 import top.wkbin.tianxuan.core.common.result.AppResult
 
@@ -93,7 +95,17 @@ class ToolManager(
 ) {
     private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val installMutex = Mutex()
-    private val installJobs = mutableMapOf<String, Job>()
+
+    /**
+     * 正在进行的安装/更新任务表（toolId → Job）。
+     *
+     * 必须是并发容器：[startInstall]/[startUpdate]/[cancelInstall]/[syncRegistry] 在主线程
+     * 读取，而注册与注销在 [installInternal] 的 IO 线程内发生。此前是 `mutableMapOf`
+     * （LinkedHashMap），跨线程无同步读写会踩两类不可恢复的坑：读取时若正逢扩容，
+     * 桶链表可能成环导致读线程**死循环**占满 CPU；[syncRegistry] 迭代 keys 时若并发写入
+     * 则抛 ConcurrentModificationException。
+     */
+    private val installJobs = ConcurrentHashMap<String, Job>()
     private val _installProgress = MutableStateFlow<Map<String, ToolInstallProgress>>(emptyMap())
     val installProgress: StateFlow<Map<String, ToolInstallProgress>> = _installProgress.asStateFlow()
     private val _verifications = MutableStateFlow<Map<String, ToolVerification>>(emptyMap())
@@ -284,32 +296,35 @@ class ToolManager(
 
     fun isToolSupported(toolId: String): Boolean = getAdapter(toolId) != null
 
-    fun startInstall(toolId: String): Job {
-        val existing = installJobs[toolId]
-        if (existing?.isActive == true) return existing
-        return managerScope.launch {
+    fun startInstall(toolId: String): Job = launchInstall(toolId) { install(it) }
+
+    fun startUpdate(toolId: String): Job = launchInstall(toolId) { update(it) }
+
+    /**
+     * 安装/更新的统一启动口。两者除装配流不同外完全一致，合并后只需维护一份竞态处理。
+     *
+     * [installJobs] 是并发读写的共享表：本函数与 [cancelInstall] 由 ViewModel 在主线程
+     * 调用，而注册/注销发生在 managerScope(IO) 的 [installInternal] 内。因此这里
+     * 一律不做「读一次再判空」——那种写法两个调用方会同时看到空表并各自启动一路装配，
+     * 对同一个工具并发解包会互相覆盖文件。改为在表内原子完成「登记或复用」。
+     */
+    private fun launchInstall(toolId: String, flow: (String) -> Flow<InstallEvent>): Job {
+        val job = managerScope.launch(start = CoroutineStart.LAZY) {
             try {
-                install(toolId).collect { }
+                flow(toolId).collect { }
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (throwable: Throwable) {
                 // Handled in install flow
             }
         }
-    }
-
-    fun startUpdate(toolId: String): Job {
-        val existing = installJobs[toolId]
-        if (existing?.isActive == true) return existing
-        return managerScope.launch {
-            try {
-                update(toolId).collect { }
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (throwable: Throwable) {
-                // Handled in update flow
-            }
+        val existing = installJobs.putIfAbsent(toolId, job)
+        if (existing != null && existing.isActive) {
+            job.cancel()
+            return existing
         }
+        job.start()
+        return job
     }
 
     private fun getAdapter(toolId: String): ToolRuntimeAdapter? {
@@ -630,8 +645,11 @@ class ToolManager(
         val preservePreviousInstall = operation == OPERATION_UPDATE &&
             previousTool?.installedVersion != null
         installMutex.withLock {
-            check(toolId !in installJobs) { "工具正在安装：$toolId" }
-            installJobs[toolId] = currentJob
+            // 允许「表里的 job 就是发起本次装配的那个」——[launchInstall] 会先把 Job 登记进表
+            // 再启动，那条路径下 currentJob 与表内条目是同一个实例。只有**别的** Job 正在跑同一
+            // 工具时才拒绝，否则 startInstall 会被自己刚登记的条目挡死。
+            val running = installJobs.putIfAbsent(toolId, currentJob)
+            check(running == null || running === currentJob) { "工具正在安装：$toolId" }
             installLogRepository.deleteForTool(distroId, toolId)
             updateProgress(ToolInstallProgress(toolId, "准备安装", 0f))
             toolRepository.updateState(distroId, toolId, ToolState.INSTALLING.name)
@@ -649,6 +667,25 @@ class ToolManager(
         val toolName = previousTool?.name ?: toolRepository.findById(distroId, toolId)?.name ?: toolId
         var cancelled = false
         var transaction: InstallTransaction? = null
+
+        /** 失败/取消的善后：回滚事务、按是否保留旧版落库、释放运行时引用。四处调用点共用。 */
+        suspend fun settleFailure(cancelledByUser: Boolean) {
+            transaction?.let { tx ->
+                try {
+                    installTransactionManager.rollback(tx)
+                } finally {
+                    transaction = null
+                }
+            }
+            toolRepository.updateStateAndInstalledVersion(
+                distroId = distroId,
+                id = toolId,
+                state = failureState(preservePreviousInstall, previousTool, cancelled = cancelledByUser),
+                installedVersion = if (preservePreviousInstall) previousTool.installedVersion else null,
+            )
+            if (!preservePreviousInstall) releaseRuntimeReferences(toolId, distroId)
+        }
+
         try {
             if (operation == OPERATION_UPDATE) {
                 linuxRuntime.listBackground()
@@ -671,25 +708,14 @@ class ToolManager(
                         notificationNotifier.showProgress(toolId, toolName, safeEvent.message, safeEvent.progress)
                     }
                     is InstallEvent.Completed -> Unit
-                    is InstallEvent.Failed -> {
-                        transaction?.let { installTransactionManager.rollback(it) }
-                        transaction = null
-                        toolRepository.updateStateAndInstalledVersion(
-                            distroId = distroId,
-                            id = toolId,
-                            state = failureState(preservePreviousInstall, previousTool),
-                            installedVersion = if (preservePreviousInstall) previousTool.installedVersion else null,
-                        )
-                        if (!preservePreviousInstall) releaseRuntimeReferences(toolId, distroId)
-                        notificationNotifier.showFailed(toolId, toolName, safeEvent.message)
-                    }
                     is InstallEvent.Cancelled -> {
                         notificationNotifier.cancel(toolId)
                     }
-                    else -> Unit
-                }
-                when (safeEvent) {
-                    is InstallEvent.Failed -> updateTask(distroId, toolId, TASK_FAILED, safeEvent.message)
+                    is InstallEvent.Failed -> {
+                        settleFailure(cancelledByUser = false)
+                        notificationNotifier.showFailed(toolId, toolName, safeEvent.message)
+                        updateTask(distroId, toolId, TASK_FAILED, safeEvent.message)
+                    }
                     else -> Unit
                 }
                 if (safeEvent is InstallEvent.Completed) {
@@ -717,21 +743,8 @@ class ToolManager(
             cancelled = true
             notificationNotifier.cancel(toolId)
             withContext(NonCancellable) {
-                transaction?.let { tx ->
-                    try {
-                        installTransactionManager.rollback(tx)
-                    } finally {
-                        transaction = null
-                    }
-                }
-                toolRepository.updateStateAndInstalledVersion(
-                    distroId = distroId,
-                    id = toolId,
-                    state = failureState(preservePreviousInstall, previousTool, cancelled = true),
-                    installedVersion = if (preservePreviousInstall) previousTool.installedVersion else null,
-                )
+                settleFailure(cancelledByUser = true)
                 updateTask(distroId, toolId, TASK_CANCELLED, "用户取消安装")
-                if (!preservePreviousInstall) releaseRuntimeReferences(toolId, distroId)
                 val event = InstallEvent.Cancelled(toolId)
                 recordEvent(distroId, event)
                 updateFromEvent(event)
@@ -744,20 +757,7 @@ class ToolManager(
             )
             notificationNotifier.showFailed(toolId, toolName, event.message)
             withContext(NonCancellable) {
-                transaction?.let { tx ->
-                    try {
-                        installTransactionManager.rollback(tx)
-                    } finally {
-                        transaction = null
-                    }
-                }
-                toolRepository.updateStateAndInstalledVersion(
-                    distroId = distroId,
-                    id = toolId,
-                    state = failureState(preservePreviousInstall, previousTool),
-                    installedVersion = if (preservePreviousInstall) previousTool.installedVersion else null,
-                )
-                if (!preservePreviousInstall) releaseRuntimeReferences(toolId, distroId)
+                settleFailure(cancelledByUser = false)
                 updateTask(distroId, toolId, TASK_FAILED, event.message)
                 recordEvent(distroId, event)
                 updateFromEvent(event)
@@ -766,24 +766,15 @@ class ToolManager(
         } finally {
             withContext(NonCancellable) {
                 installMutex.withLock {
-                    if (installJobs[toolId] === currentJob) installJobs.remove(toolId)
+                    // 两参 remove 是原子「比较并删除」：仅当表内仍是自己这一条才删。
+                    // 写成 if (installJobs[id] === job) remove(id) 的话，两条语句之间
+                    // 可能被新的装配登记占据同一个 key，从而把新任务从表里抹掉——
+                    // 新任务随即变成「表里查不到的孤儿」，取消安装将再也找不到它。
+                    installJobs.remove(toolId, currentJob)
                 }
                 if (!cancelled && _installProgress.value[toolId]?.terminal != true) {
                     // An adapter that ended without Completed/Failed is not a successful install.
-                    transaction?.let { tx ->
-                        try {
-                            installTransactionManager.rollback(tx)
-                        } finally {
-                            transaction = null
-                        }
-                    }
-                    toolRepository.updateStateAndInstalledVersion(
-                        distroId = distroId,
-                        id = toolId,
-                        state = failureState(preservePreviousInstall, previousTool),
-                        installedVersion = if (preservePreviousInstall) previousTool.installedVersion else null,
-                    )
-                    if (!preservePreviousInstall) releaseRuntimeReferences(toolId, distroId)
+                    settleFailure(cancelledByUser = false)
                     val event = InstallEvent.Failed(toolId, "安装流程未完成")
                     updateTask(distroId, toolId, TASK_FAILED, event.message)
                     recordEvent(distroId, event)
@@ -802,7 +793,10 @@ class ToolManager(
     suspend fun uninstall(toolId: String, deleteData: Boolean = false) {
         require(isToolSupported(toolId)) { "暂不支持卸载工具：$toolId" }
         installMutex.withLock {
-            check(toolId !in installJobs) { "工具正在安装：$toolId" }
+            // 必须用 containsKey：ConcurrentHashMap 覆写了 contains，使其等价于
+            // containsValue（历史遗留语义），写成 `toolId !in installJobs` 会去比对
+            // 全部 Job 值，永远为真，这道「安装中禁止卸载」的闸门等于不存在。
+            check(!installJobs.containsKey(toolId)) { "工具正在安装：$toolId" }
         }
         linuxRuntime.listBackground()
             .filter { it.toolId == toolId }
