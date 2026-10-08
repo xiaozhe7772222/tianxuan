@@ -1575,6 +1575,7 @@ class SettingsViewModel(
         responseApiEnabled: Boolean = false,
         promptCachingEnabled: Boolean = true,
         promptCacheTtl1h: Boolean = false,
+        onSaved: () -> Unit = {},
     ): Boolean {
         // 与 discoverModels 同源的端点策略：不安全的 Base URL（非 http(s)、内嵌凭据、
         // 无法解析）拒绝落库，否则请求期才在 OkHttp 解析处崩溃。
@@ -1585,37 +1586,44 @@ class SettingsViewModel(
         }
         _profileSaveError.value = null
         viewModelScope.launch {
-            val cleanModels = models.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-            val profileName = name.trim().ifBlank {
-                if (cleanModels.size == 1) cleanModels.first() else provider.trim()
+            try {
+                val cleanModels = models.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+                val profileName = name.trim().ifBlank {
+                    if (cleanModels.size == 1) cleanModels.first() else provider.trim()
+                }
+                profileWriter.upsertProfile(
+                    AiProfileWriter.UpsertRequest(
+                        id = id,
+                        name = profileName,
+                        provider = provider,
+                        model = cleanModels.joinToString(", "),
+                        baseUrl = cleanUrl,
+                        apiKey = apiKey,
+                        requestsPerMinutePerKey = requestsPerMinutePerKey,
+                        temperature = temperature,
+                        maxTokens = maxTokens,
+                        topP = topP,
+                        reasoningMode = reasoningMode,
+                        reasoningEffort = reasoningEffort,
+                        toolCallMode = toolCallMode,
+                        contextTokens = contextTokens,
+                        compactionKeepRecentTokens = compactionKeepRecentTokens,
+                        compactionReserveTokens = compactionReserveTokens,
+                        customHeaders = customHeaders,
+                        pureChatMode = pureChatMode,
+                        visionEnabled = visionEnabled,
+                        imageGenerationEnabled = imageGenerationEnabled,
+                        responseApiEnabled = responseApiEnabled,
+                        promptCachingEnabled = promptCachingEnabled,
+                        promptCacheTtl1h = promptCacheTtl1h,
+                    ),
+                )
+                onSaved()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _profileSaveError.value = "保存失败：${e.message ?: e::class.simpleName}"
             }
-            profileWriter.upsertProfile(
-                AiProfileWriter.UpsertRequest(
-                    id = id,
-                    name = profileName,
-                    provider = provider,
-                    model = cleanModels.joinToString(", "),
-                    baseUrl = cleanUrl,
-                    apiKey = apiKey,
-                    requestsPerMinutePerKey = requestsPerMinutePerKey,
-                    temperature = temperature,
-                    maxTokens = maxTokens,
-                    topP = topP,
-                    reasoningMode = reasoningMode,
-                    reasoningEffort = reasoningEffort,
-                    toolCallMode = toolCallMode,
-                    contextTokens = contextTokens,
-                    compactionKeepRecentTokens = compactionKeepRecentTokens,
-                    compactionReserveTokens = compactionReserveTokens,
-                    customHeaders = customHeaders,
-                    pureChatMode = pureChatMode,
-                    visionEnabled = visionEnabled,
-                    imageGenerationEnabled = imageGenerationEnabled,
-                    responseApiEnabled = responseApiEnabled,
-                    promptCachingEnabled = promptCachingEnabled,
-                    promptCacheTtl1h = promptCacheTtl1h,
-                ),
-            )
         }
         return true
     }

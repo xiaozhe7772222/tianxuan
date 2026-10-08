@@ -190,8 +190,8 @@ fun ModelEditorScreen(
                     responseApiEnabled = responseApiEnabled,
                     promptCachingEnabled = promptCachingEnabled,
                     promptCacheTtl1h = promptCacheTtl1h,
+                    onSaved = onSaved,
                 )
-                if (saved) onSaved()
             },
             onFillFromJson = { jsonStr ->
                 val result = viewModel.parseProfilesFromJson(jsonStr)
