@@ -215,11 +215,12 @@ dependencies {
 }
 
 dependencies {
-    // LeakCanary：内测期是排障主力（内存泄漏在平板上比在桌面更难复现与定位）。
-    // debug 构建恒开；release 由 tianxuan.leakcanary 控制，
-    // 因为内测包走 release 变体，若只在 debug 声明，内测用户反而拿不到泄漏报告。
-    debugImplementation(libs.leakcanary.android)
+    // LeakCanary：排障主力。默认全关闭——避免桌面出现「Leaks」小鸟图标入口
+    // （LeakCanary 2.x 会自动注册带 LAUNCHER intent-filter 的入口 Activity）。
+    // 排障时用 -Ptianxuan.leakcanary=true 显式开启（debug 与 release 同时生效），
+    // 内测包与本地调试包都不应默认带上该图标。
     if (tianxuanLeakCanary) {
+        debugImplementation(libs.leakcanary.android)
         releaseImplementation(libs.leakcanary.android)
     }
     implementation(project(":core:common"))
