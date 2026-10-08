@@ -129,6 +129,23 @@ class McpHttpTransport(
                     .ifBlank { if (result.isError) "执行失败" else "执行成功" }
             } catch (t: Throwable) {
                 if (t is CancellationException) throw t
+                // OAuth token 过期：401/403 可安全重试（请求未被处理，无副作用风险）
+                if (t is McpHttpStatusException && t.statusCode in setOf(401, 403) &&
+                    server.authMode == top.wkbin.tianxuan.core.model.McpAuthMode.OAUTH
+                ) {
+                    oauthTokens?.forceRefresh(server.id)
+                    dropSession(server.id, session)
+                    val retrySession = ensureSession(server)
+                    val retryResponse = exchange(
+                        retrySession,
+                        "tools/call",
+                        json.encodeToJsonElement(McpCallToolParams.serializer(), McpCallToolParams(toolName, arguments)),
+                    )
+                    val retryResult = retryResponse.result?.let { json.decodeFromJsonElement(McpCallToolResult.serializer(), it) }
+                        ?: error("MCP tools/call did not return a result")
+                    return@withContext (!retryResult.isError to retryResult.content.joinToString("\n") { it.text.orEmpty() }
+                        .ifBlank { if (retryResult.isError) "执行失败" else "执行成功" })
+                }
                 if (isTransportFailure(t)) {
                     dropSession(server.id, session)
                     throw IOException("MCP 工具响应丢失；为避免副作用重复，未自动重试 tools/call", t)
@@ -424,7 +441,7 @@ class McpHttpTransport(
                 // TODO: 按 Streamable HTTP 规范实现 GET SSE 流读取响应（成本可控时补齐）
                 throw IOException("MCP HTTP ${response.code} accepted without response body (GET SSE stream not implemented)")
             }
-            json.decodeFromString(JsonRpcResponse.serializer(), body)
+            json.decodeFromString(JsonRpcResponseSerializer, body)
         }
 
     private fun readSse(response: Response, requestId: String): JsonRpcResponse {
@@ -455,7 +472,7 @@ class McpHttpTransport(
     }
 
     private fun decodeSse(lines: List<String>, id: String) =
-        runCatching { json.decodeFromString(JsonRpcResponse.serializer(), lines.joinToString("\n")) }
+        runCatching { json.decodeFromString(JsonRpcResponseSerializer, lines.joinToString("\n")) }
             .getOrNull()?.takeIf { it.id == id }
 
     private fun readLimited(response: Response, requestId: String, isToolCall: Boolean = false): String {
@@ -584,7 +601,7 @@ class McpHttpTransport(
                 return
             }
             val rpc = runCatching {
-                json.decodeFromString(JsonRpcResponse.serializer(), data.joinToString("\n"))
+                json.decodeFromString(JsonRpcResponseSerializer, data.joinToString("\n"))
             }.getOrNull() ?: return
             rpc.id?.let { key -> pending.remove(key)?.complete(rpc) }
         }

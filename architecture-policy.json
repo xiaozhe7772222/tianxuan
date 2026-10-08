@@ -28,7 +28,7 @@
       "feature.terminal", "feature.workspace", "feature.workflow", "feature.settings",
       "feature.developer", "feature.custom_iteration", "feature.onboarding",
       "feature.navigation", "feature.browser", "feature.git", "feature.preview",
-      "feature.a2uipoc"
+      "feature.a2uipoc", "feature.knowledge"
     ]
   },
   "importBans": [
@@ -145,7 +145,7 @@
         "feature.theme", "feature.home", "feature.chat", "feature.terminal",
         "feature.workspace", "feature.workflow", "feature.settings", "feature.developer",
         "feature.custom_iteration", "feature.browser", "feature.git", "feature.preview",
-        "feature.a2uipoc"
+        "feature.a2uipoc", "feature.knowledge"
       ]
     },
     {
@@ -162,6 +162,12 @@
       "path": "feature/a2uipoc",
       "_doc": "A2UI（Agent-to-UI）渲染器 PoC：官方 androidx.a2ui 1.0.0-alpha01 仅允许在本模块使用，对外只暴露 A2uiPocSurfaceCard / A2uiPocScreen",
       "requires": ["harness", "feature.theme", "feature.components"]
+    },
+    {
+      "id": "feature.knowledge",
+      "path": "feature/knowledge",
+      "_doc": "RAG 知识库管理 UI：文档列表/添加/删除/检索测试，经 KnowledgeManager 间接调用嵌入与检索",
+      "requires": ["core.database", "core.datastore", "harness", "tools"]
     }
   ]
 }

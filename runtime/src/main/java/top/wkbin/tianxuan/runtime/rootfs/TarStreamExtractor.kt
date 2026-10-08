@@ -58,6 +58,7 @@ class TarStreamExtractor internal constructor(
         var pendingPax = emptyMap<String, String>()
         val globalPax = mutableMapOf<String, String>()
         val deferredHardlinks = mutableListOf<Pair<File, File>>()
+        var totalBytesWritten = 0L
 
         while (true) {
             val headerBytes = ByteArray(HEADER_SIZE)
@@ -167,12 +168,23 @@ class TarStreamExtractor internal constructor(
                     deferredHardlinks += target to candidateSource.toFile()
                 }
                 TYPE_REGULAR, TYPE_REGULAR_ALT -> {
+                    if (header.size > MAX_SINGLE_ENTRY_SIZE) {
+                        throw java.io.IOException(
+                            "Tar entry '$entryName' size ${header.size} exceeds limit $MAX_SINGLE_ENTRY_SIZE"
+                        )
+                    }
+                    if (totalBytesWritten + header.size > MAX_TOTAL_EXTRACTION_SIZE) {
+                        throw java.io.IOException(
+                            "Total extraction size exceeds limit $MAX_TOTAL_EXTRACTION_SIZE at entry '$entryName'"
+                        )
+                    }
                     ensurePathWritable(target.parentFile ?: destination, destination)
                     target.parentFile?.mkdirs()
                     deleteTree(target)
                     target.outputStream().use { output ->
                         copyData(input, header.size, output)
                     }
+                    totalBytesWritten += header.size
                     val safeFileMode = if (header.mode > 0) (header.mode and MODE_MASK) or MODE_OWNER_RW else MODE_FILE_DEFAULT
                     applyMode(target, safeFileMode)
                 }
@@ -317,7 +329,11 @@ class TarStreamExtractor internal constructor(
         while (remaining > 0) {
             val toRead = minOf(remaining, buffer.size.toLong()).toInt()
             val read = input.read(buffer, 0, toRead)
-            if (read < 0) break
+            if (read < 0) {
+                throw java.io.IOException(
+                    "Tar stream ended prematurely: $remaining of $size bytes unread"
+                )
+            }
             output.write(buffer, 0, read)
             remaining -= read
         }
@@ -394,6 +410,8 @@ class TarStreamExtractor internal constructor(
         const val PREFIX_LENGTH = 155
         const val BUFFER_SIZE = 64 * 1024
         const val MAX_IN_MEMORY_ENTRY_SIZE = 4L * 1024L * 1024L
+        const val MAX_SINGLE_ENTRY_SIZE = 2L * 1024L * 1024L * 1024L
+        const val MAX_TOTAL_EXTRACTION_SIZE = 8L * 1024L * 1024L * 1024L
 
         const val TYPE_REGULAR = '0'
         const val TYPE_REGULAR_ALT = '\u0000'

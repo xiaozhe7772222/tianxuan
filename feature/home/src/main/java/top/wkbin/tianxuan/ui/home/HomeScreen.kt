@@ -1311,19 +1311,17 @@ private fun SpecRow(label: String, value: String) {
 @Composable
 private fun PulsingStatusDot(color: Color, isPulsing: Boolean) {
     val transition = rememberInfiniteTransition(label = "status_dot_pulse")
-    val alpha by if (isPulsing) {
-        transition.animateFloat(
-            initialValue = 0.4f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1000, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "pulse_alpha",
-        )
-    } else {
-        remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
-    }
+    // 始终调用 animateFloat（条件 remember 会破坏 Compose 状态恢复）；
+    // isPulsing=false 时 initial=target=1f，输出恒定不重组。
+    val alpha by transition.animateFloat(
+        initialValue = if (isPulsing) 0.4f else 1f,
+        targetValue = if (isPulsing) 1f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(if (isPulsing) 1000 else 60_000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "pulse_alpha",
+    )
 
     Box(
         modifier = Modifier

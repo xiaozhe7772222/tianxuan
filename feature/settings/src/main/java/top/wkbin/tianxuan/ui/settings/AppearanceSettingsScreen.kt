@@ -529,14 +529,18 @@ private fun TerminalPreviewCard(
 @Composable
 private fun ChengmingBackgroundPreview(uri: String) {
     val context = LocalContext.current
-    val bitmap = remember(uri) {
-        runCatching {
-            context.contentResolver.openInputStream(android.net.Uri.parse(uri))?.use(BitmapFactory::decodeStream)
-        }.getOrNull()
+    var bitmap by remember { androidx.compose.runtime.mutableStateOf<android.graphics.Bitmap?>(null) }
+    androidx.compose.runtime.LaunchedEffect(uri) {
+        bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                context.contentResolver.openInputStream(android.net.Uri.parse(uri))?.use(BitmapFactory::decodeStream)
+            }.getOrNull()
+        }
     }
-    if (bitmap != null) {
+    val previewBitmap = bitmap
+    if (previewBitmap != null) {
         Image(
-            bitmap = bitmap.asImageBitmap(),
+            bitmap = previewBitmap.asImageBitmap(),
             contentDescription = stringResource(R.string.settings_background_preview),
             modifier = Modifier
                 .fillMaxWidth()

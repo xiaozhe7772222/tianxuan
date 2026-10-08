@@ -48,8 +48,6 @@ def build_plugin():
     if not os.path.isfile(server_bin):
         print(f"[*] cc-switch-server binary not found locally. Downloading from {DOWNLOAD_URL} ...")
         ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(DOWNLOAD_URL, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, context=ctx, timeout=60) as resp, open(server_bin, "wb") as f:
             f.write(resp.read())
@@ -58,7 +56,12 @@ def build_plugin():
     current_hash = sha256_file(server_bin)
     print(f"[*] cc-switch-server SHA256: {current_hash}")
     if current_hash != EXPECTED_SHA256:
-        print(f"[!] Warning: binary hash does not match expected ({EXPECTED_SHA256})")
+        raise SystemExit(
+            f"[!] FATAL: binary hash mismatch.\n"
+            f"    expected: {EXPECTED_SHA256}\n"
+            f"    actual:   {current_hash}\n"
+            f"    Refusing to package untrusted binary. Update EXPECTED_SHA256 if the upstream release changed."
+        )
 
     # 1. Write bin/cc-switch-daemon wrapper script
     daemon_wrapper = """#!/bin/sh

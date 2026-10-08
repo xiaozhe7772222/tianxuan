@@ -133,10 +133,17 @@ class SkillInstallationManager(
                 destFile.writeBytes(bytes)
             }
 
-            if (targetDir.exists()) targetDir.deleteRecursively()
+            // 原子替换：先把旧目录 rename 到 .legacy 备份，再 rename 新目录；
+            // rename 失败可回滚，避免「先删旧再 rename 失败」导致旧技能数据永久丢失。
+            val legacyDir = File(targetDir.parentFile, "${targetDir.name}.legacy-${System.currentTimeMillis()}")
+            if (targetDir.exists() && !targetDir.renameTo(legacyDir)) {
+                throw java.io.IOException("技能目录备份失败: ${targetDir.absolutePath}")
+            }
             if (!stagingDir.renameTo(targetDir)) {
+                if (legacyDir.exists()) legacyDir.renameTo(targetDir)
                 throw java.io.IOException("技能目录暂存重命名失败: ${stagingDir.absolutePath} -> ${targetDir.absolutePath}")
             }
+            if (legacyDir.exists()) legacyDir.deleteRecursively()
             renamed = true
 
             val guestPath = guestPrefix.trimEnd('/') + "/$skillId"

@@ -20,6 +20,7 @@ dependencies {
     implementation(project(":feature:git"))
     implementation(project(":feature:preview"))
     implementation(project(":feature:a2uipoc"))
+    implementation(project(":feature:knowledge"))
     implementation(libs.kotlinx.serialization.json)
     // LocalLiquidGlassBackdrop 的类型 LayerBackdrop 来自该库，类型推断需要它在 classpath 上
     implementation(libs.backdrop)

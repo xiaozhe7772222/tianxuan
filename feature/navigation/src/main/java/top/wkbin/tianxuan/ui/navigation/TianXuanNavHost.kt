@@ -103,6 +103,7 @@ sealed interface AppDestination : NavKey
 @Serializable data object LiquidGlassCatalogDestination : AppDestination
 @Serializable data object AdbLogcatDestination : AppDestination
 @Serializable data object A2uiPocDestination : AppDestination
+@Serializable data object KnowledgeDestination : AppDestination
 @Serializable data object CustomIterationDestination : AppDestination
 @Serializable data class TerminalDestination(val toolId: String = "", val project: String = "") : AppDestination
 @Serializable data object BrowserDestination : AppDestination
@@ -364,6 +365,7 @@ fun TianXuanNavHost(
                         onOpenAboutCommunity = { settingsStack.push(SettingsDestination, AboutCommunityDestination) },
                         onOpenSearch = { settingsStack.push(SettingsDestination, SettingsSearchDestination) },
                         onOpenA2uiPoc = { settingsStack.push(SettingsDestination, A2uiPocDestination) },
+                        onOpenKnowledge = { settingsStack.push(SettingsDestination, KnowledgeDestination) },
                         viewModel = settingsViewModel,
                     )
                 }
@@ -727,6 +729,11 @@ fun TianXuanNavHost(
             entry<A2uiPocDestination> {
                 GuardedEntry(A2uiPocDestination) {
                     top.wkbin.tianxuan.feature.a2uipoc.A2uiPocScreen(onBack = ::popBack)
+                }
+            }
+            entry<KnowledgeDestination> {
+                GuardedEntry(KnowledgeDestination) {
+                    top.wkbin.tianxuan.ui.knowledge.KnowledgeScreen(onBack = ::popBack)
                 }
             }
             entry<CustomIterationDestination> {

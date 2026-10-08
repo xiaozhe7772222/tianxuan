@@ -17,6 +17,7 @@ import top.wkbin.tianxuan.harness.ToolCallMode
 import top.wkbin.tianxuan.harness.UserMessage
 import top.wkbin.tianxuan.harness.compaction.CompactionManager
 import top.wkbin.tianxuan.harness.compaction.SummaryRequestContext
+import top.wkbin.tianxuan.harness.knowledge.KnowledgeManager
 import top.wkbin.tianxuan.harness.prompt.MemoryRecallSelector
 import top.wkbin.tianxuan.harness.prompt.SystemPromptBuilder
 
@@ -41,6 +42,8 @@ class ApiContextAssembler(
     private val sessionStore: SessionTreeStore,
     private val memoryRecallSelector: MemoryRecallSelector,
     private val agentApprovalRepository: AgentApprovalRepository,
+    /** RAG 知识库管理器；为 null 时自动注入功能禁用（向后兼容）。 */
+    private val knowledgeManager: KnowledgeManager? = null,
 ) {
     suspend fun assemble(
         sessId: String,
@@ -131,6 +134,21 @@ class ApiContextAssembler(
         return buildList {
             if (systemPrompt.isNotEmpty()) {
                 add(ApiMessage(role = "system", content = systemPrompt))
+            }
+
+            // RAG 知识库自动注入：在 system prompt 之后作为独立 system 消息
+            // （不进 system prompt 本体，避免破坏 prefix cache 稳定性契约）。
+            // 知识库为空或检索失败时静默跳过，对正常对话无影响。
+            if (!model.pureChatMode && knowledgeManager != null) {
+                val lastUserText = msgs.lastOrNull { it is UserMessage }?.let { (it as UserMessage).text }
+                if (!lastUserText.isNullOrBlank() && lastUserText.length <= 8000) {
+                    val ragContext = runCatching {
+                        knowledgeManager.contextForPrompt(lastUserText, topK = 3)
+                    }.getOrNull()
+                    if (!ragContext.isNullOrBlank() && ragContext.length <= 8000) {
+                        add(ApiMessage(role = "system", content = ragContext))
+                    }
+                }
             }
 
             // 老轮次工具结果截断（先于压缩判定）：预算线未越过时，历史轮的大输出（浏览器快照、

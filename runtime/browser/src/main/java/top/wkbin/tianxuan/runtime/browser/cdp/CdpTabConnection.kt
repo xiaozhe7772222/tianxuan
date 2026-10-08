@@ -97,7 +97,9 @@ class CdpTabConnection(
     }
 
     override suspend fun onClosed() {
-        // 断连（WebView 销毁 / devtools 关闭）：状态清理由 CdpManager 感知并重建语义
+        // 断连（WebView 销毁 / devtools 关闭）：主动清理残留暂停态，
+        // 否则 tabDebugPaused 永久拦截该 tab 的 snapshot/click/type 工具。
+        runCatching { debug.cleanup() }
     }
 
     private suspend fun handlePageEvent(method: String, params: JsonObject) {

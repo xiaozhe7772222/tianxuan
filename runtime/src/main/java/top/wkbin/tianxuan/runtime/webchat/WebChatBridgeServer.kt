@@ -475,7 +475,11 @@ class WebChatBridgeServer(
         val root = File(entity.path).canonicalFile
         val file = File(root, relative).canonicalFile
         require(file.isFile && (file == root || file.path.startsWith(root.path + File.separator))) { "文件路径无效" }
-        exchange.responseHeaders.add("Content-Disposition", "attachment; filename=\"${file.name.replace("\"", "")}\"")
+        // 限制单文件下载大小，防止大文件 OOM（与 read/write 的 MAX_FILE_READ_BYTES 对齐）
+        require(file.length() <= MAX_DOWNLOAD_BYTES) { "文件过大（${file.length()} > $MAX_DOWNLOAD_BYTES），拒绝下载" }
+        // 过滤文件名中的 CRLF 控制字符，防止 Content-Disposition 头注入
+        val safeName = file.name.replace(Regex("[\\r\\n\"\\\\]"), "")
+        exchange.responseHeaders.add("Content-Disposition", "attachment; filename=\"$safeName\"")
         sendResponse(exchange, 200, "application/octet-stream", file.readBytes())
     }
 
@@ -661,5 +665,6 @@ class WebChatBridgeServer(
         const val DEFAULT_PORT = DEFAULT_WEBCHAT_PORT
         const val NOTIFICATION_CHANNEL_ID = "tianxuan_webchat_bridge"
         const val NOTIFICATION_ID = 8899
+        const val MAX_DOWNLOAD_BYTES = 64L * 1024L * 1024L
     }
 }

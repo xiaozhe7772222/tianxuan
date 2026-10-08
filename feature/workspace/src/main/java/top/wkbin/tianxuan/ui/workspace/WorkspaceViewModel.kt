@@ -212,7 +212,8 @@ class WorkspaceViewModel(
 
     // 兼容原 devSuites 接口
     val devSuites: List<top.wkbin.tianxuan.core.model.PluginBundle> get() = pluginBundles
-    val showDevSuiteDialog: StateFlow<Boolean> get() = MutableStateFlow(_activeBundleForSetup.value != null).asStateFlow()
+    val showDevSuiteDialog: StateFlow<Boolean> =
+        _activeBundleForSetup.map { it != null }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val selectedDevSuites: StateFlow<Set<String>> get() = _selectedComponents
     val isInstallingSuites: StateFlow<Boolean> get() = _isInstallingComponents
 

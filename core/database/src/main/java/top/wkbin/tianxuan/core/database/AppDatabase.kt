@@ -11,7 +11,7 @@ import top.wkbin.tianxuan.core.database.task.AgentTaskDao
  * 提成常量而不是散落的字面量：过去 `@Database(version = 53)` 与迁移链终点各写一处，
  * 改版本时漏改任一处，Room 只会在用户设备上抛 IllegalStateException 才暴露。
  */
-const val SCHEMA_VERSION: Int = 53
+const val SCHEMA_VERSION: Int = 54
 
 @Database(
     entities = [
@@ -51,6 +51,8 @@ const val SCHEMA_VERSION: Int = 53
         WorkflowEntity::class,
         WorkflowExecutionLogEntity::class,
         WorkflowScheduleEntity::class,
+        KbDocumentEntity::class,
+        KbChunkEntity::class,
     ],
     version = SCHEMA_VERSION,
     exportSchema = true,
@@ -80,5 +82,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun agentTaskDao(): AgentTaskDao
     abstract fun workflowDao(): WorkflowDao
     abstract fun workflowScheduleDao(): WorkflowScheduleDao
+    abstract fun knowledgeDao(): KnowledgeDao
 }
 

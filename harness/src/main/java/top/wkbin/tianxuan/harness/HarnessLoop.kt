@@ -773,6 +773,10 @@ class HarnessLoop(
             job?.cancelAndJoin()
             val restarted = turnCoordinator.withSessionMutex(sessId) {
                 cancelApprovalTimeout(sessId)
+                // 防御 cancel/approve 竞态：cancelAndJoin 窗口（锁外等旧 job finally）内，
+                // resolveApproval 可能已启动新 job 并加入 sessionJobs；需一并取消，
+                // 否则用户点"停止"后新 job 仍执行已批准的写入工具。
+                sessionJobs[sessId]?.let { if (it.isActive) it.cancel() }
                 var approvalsSettled = true
                 try {
                     rejectPendingApprovalsForCancel(sessId)

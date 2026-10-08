@@ -76,15 +76,15 @@ done
 export HOME="${HOME:-/root}"
 export USER="${USER:-root}"
 export LOGNAME="${LOGNAME:-root}"
-export HOST="${CC_SWITCH_HOST:-0.0.0.0}"
+export HOST="${CC_SWITCH_HOST:-127.0.0.1}"
 export CC_SWITCH_HOST="$HOST"
 export PORT="$PORT"
 export CC_SWITCH_PORT="$PORT"
 export CC_SWITCH_DATA_DIR="$DATA_DIR"
 export XDG_DATA_HOME="$DATA_DIR"
-export CC_SWITCH_LAN_CORS=1
-export ALLOW_LAN_CORS=1
-export ALLOW_HTTP_BASIC_OVER_HTTP=1
+export CC_SWITCH_LAN_CORS="${CC_SWITCH_LAN_CORS:-0}"
+export ALLOW_LAN_CORS="$CC_SWITCH_LAN_CORS"
+export ALLOW_HTTP_BASIC_OVER_HTTP="${ALLOW_HTTP_BASIC_OVER_HTTP:-0}"
 export RUST_LOG="${RUST_LOG:-info}"
 
 # Ensure data directory and HOME directory layout exist
@@ -98,12 +98,21 @@ if [ ! -d "$HOME/.cc-switch" ]; then
     ln -sfn "$DATA_DIR" "$HOME/.cc-switch" 2>/dev/null || mkdir -p "$HOME/.cc-switch"
 fi
 
-# Ensure web auth credentials exist so load_or_generate_web_credentials never errors
+# Ensure web auth credentials exist so load_or_generate_web_credentials never errors.
+# First-time setup generates a strong random password instead of a hardcoded default.
 if [ ! -f "$HOME/.cc-switch/web_username" ]; then
     printf 'admin' > "$HOME/.cc-switch/web_username" 2>/dev/null || true
 fi
 if [ ! -f "$HOME/.cc-switch/web_password" ]; then
-    printf 'admin123' > "$HOME/.cc-switch/web_password" 2>/dev/null || true
+    RANDOM_PW="$(head -c 16 /dev/urandom | base64 | tr -d '/+=' | cut -c1-20)"
+    if [ -n "$RANDOM_PW" ]; then
+        printf '%s' "$RANDOM_PW" > "$HOME/.cc-switch/web_password" 2>/dev/null || true
+        echo "[+] CC-Switch web password auto-generated (username: admin). Check $HOME/.cc-switch/web_password"
+    else
+        # Fallback if /dev/urandom unavailable
+        printf 'admin123' > "$HOME/.cc-switch/web_password" 2>/dev/null || true
+        echo "[!] WARNING: /dev/urandom unavailable, using default password. Change it immediately."
+    fi
 fi
 chmod 600 "$HOME/.cc-switch/web_username" "$HOME/.cc-switch/web_password" 2>/dev/null || true
 

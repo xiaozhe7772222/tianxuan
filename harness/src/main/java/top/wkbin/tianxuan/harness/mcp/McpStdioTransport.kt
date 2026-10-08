@@ -195,7 +195,11 @@ class McpStdioTransport(
                 error("MCP 沙箱会话启动超时（" + STARTUP_TIMEOUT_MS / 1000 + "s）：" + server.command)
             }
         } catch (t: Throwable) {
-            downUntil[server.id] = System.currentTimeMillis() + FAILURE_COOLDOWN_MS
+            // 手动测试（bypassCooldown=true）失败不写冷却：对齐 HTTP 侧 B7 口径，
+            // 否则设置页手测失败一次后对话路径的 discover 在接下来几分钟全部快速失败。
+            if (!bypassCooldown) {
+                downUntil[server.id] = System.currentTimeMillis() + FAILURE_COOLDOWN_MS
+            }
             throw t
         }
         downUntil.remove(server.id)
@@ -324,7 +328,7 @@ class McpStdioTransport(
                 countIgnored("MCP 输出了过多请求回显")
                 return
             }
-            val parsed = runCatching { json.decodeFromJsonElement(JsonRpcResponse.serializer(), element) }.getOrNull()
+            val parsed = runCatching { json.decodeFromJsonElement(JsonRpcResponseSerializer, element) }.getOrNull()
                 ?: run {
                     countIgnored("MCP 输出了过多无效响应帧")
                     return

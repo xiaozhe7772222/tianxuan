@@ -116,21 +116,10 @@ class ClawHubClient(
     }
 
     private suspend fun fetchRemoteCatalog(): List<ClawHubMarketItem>? {
-        // 当配置了有效的外部 API 时发送网络请求
-        if (hubRegistryBaseUrl.isBlank() || hubRegistryBaseUrl.startsWith("mock://")) {
-            return null
-        }
-        val request = Request.Builder()
-            .url("$hubRegistryBaseUrl/catalog.json")
-            .header("Accept", "application/json")
-            .build()
-        return withContext(Dispatchers.IO) {
-            httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext null
-                // 如后续接入 ClawHub 后端，此处进行 JSON 反序列化解析；当前优雅 fallback
-                null
-            }
-        }
+        // 当前未接入 ClawHub 后端 catalog.json 反序列化（已有 HTTP 请求但永远返回 null）。
+        // 与其每次打开市场空跑一次网络请求，不如直接回退到内置精选技能。
+        // 接入后端时在此解析 JSON 并返回真实目录即可，调用方已兼容 null。
+        return null
     }
 
     companion object {

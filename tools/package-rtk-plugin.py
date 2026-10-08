@@ -32,13 +32,11 @@ def build_plugin():
         print("[*] Local rtk binary not found. Downloading from official GitHub release...")
         import urllib.request, tarfile, ssl
         ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
         url = "https://github.com/rtk-ai/rtk/releases/download/v0.47.0/rtk-aarch64-unknown-linux-gnu.tar.gz"
         tmp_tar = os.path.join(PLUGIN_DIR, "rtk-download.tar.gz")
         os.makedirs(os.path.dirname(rtk_bin_path), exist_ok=True)
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, context=ctx) as resp, open(tmp_tar, "wb") as f:
+        with urllib.request.urlopen(req, context=ctx, timeout=120) as resp, open(tmp_tar, "wb") as f:
             f.write(resp.read())
         with tarfile.open(tmp_tar, "r:gz") as tar:
             with open(rtk_bin_path, "wb") as f:
@@ -46,9 +44,22 @@ def build_plugin():
         if os.path.isfile(tmp_tar):
             os.remove(tmp_tar)
         print(f"[+] Downloaded and extracted official rtk binary to {rtk_bin_path}")
-    
+
     rtk_hash = sha256_file(rtk_bin_path)
     print(f"[*] RTK Binary SHA256: {rtk_hash}")
+
+    expected_rtk_hash = os.environ.get("EXPECTED_RTK_SHA256")
+    if expected_rtk_hash:
+        if rtk_hash != expected_rtk_hash:
+            raise SystemExit(
+                f"[!] FATAL: rtk binary hash mismatch.\n"
+                f"    expected: {expected_rtk_hash}\n"
+                f"    actual:   {rtk_hash}\n"
+                f"    Set EXPECTED_RTK_SHA256 to the correct value or unset to skip enforcement."
+            )
+    else:
+        print("[!] WARNING: EXPECTED_RTK_SHA256 not set — hash enforcement disabled. "
+              "Set it in CI to guarantee supply-chain integrity.")
     
     # Prepare directories
     payload_dir = os.path.join(PLUGIN_DIR, "payload")

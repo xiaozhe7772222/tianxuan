@@ -55,7 +55,14 @@ static char **strings_array(JNIEnv *env, jobjectArray array) {
     if (result == NULL) return NULL;
     for (int i = 0; i < n; i++) {
         jstring s = (jstring)(*env)->GetObjectArrayElement(env, array, i);
-        if (s == NULL) continue;
+        if (s == NULL) {
+            /* NULL 元素与 GetStringUTFChars 失败走同一清理路径：
+             * 否则 cargv/cenvp 中间会留下 NULL 空洞，execve 在第一个空洞处
+             * 静默截断后续参数，且 free_strings 遍历到第一个 NULL 即停止，
+             * 空洞之后所有已 strdup 的字符串全部泄漏。 */
+            free_strings(result);
+            return NULL;
+        }
         const char *cs = (*env)->GetStringUTFChars(env, s, NULL);
         if (cs == NULL) {
             /* GetStringUTFChars 失败会挂起 OOM 异常；必须释放已分配部分再返回，

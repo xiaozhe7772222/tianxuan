@@ -10,7 +10,20 @@ class ProviderResponseNormalizer(
         // Structured native calls are authoritative: skip the textual codec so the display text
         // stays byte-identical with rawText and stray markers in the content do not get stripped
         // as if they were executed. The textual branch only runs as a fallback.
-        if (!toolsEnabled || result.toolCalls.isNotEmpty()) {
+        // 工具禁用模式（pureChat / ToolCallMode.DISABLED）：丢弃模型直返的 native
+        // tool_calls，否则 TurnRunner 仍会执行它们，安全模式语义被绕过。
+        if (!toolsEnabled) {
+            return NormalizedProviderResponse(
+                result = result,
+                rawText = rawText,
+                displayText = rawText,
+                toolCalls = emptyList(),
+                textToolCallCount = 0,
+                invalidMarkerCount = 0,
+                hasUnresolvedMarkers = false,
+            )
+        }
+        if (result.toolCalls.isNotEmpty()) {
             return NormalizedProviderResponse(
                 result = result,
                 rawText = rawText,

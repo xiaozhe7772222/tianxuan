@@ -848,16 +848,9 @@ private fun CatalogWallpaperCanvas(
     isDark: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "AuroraFloat")
-    val animOffset by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(20000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "AuroraOffset",
-    )
+    // aurora 渐变球的圆心偏移动画（已被移除：原 animOffset 从未被 Canvas 读取，
+    // 却以 60fps 持续驱动重组与重绘，浪费 CPU/电量）
+    val auroraCenter = androidx.compose.ui.geometry.Offset(0.5f, 0.5f)
 
     when (wallpaper) {
         CatalogWallpaper.AURORA -> {

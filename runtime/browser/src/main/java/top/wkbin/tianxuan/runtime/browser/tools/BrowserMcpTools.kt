@@ -192,9 +192,19 @@ class BrowserMcpTools(
         return BrowserSessionToken(tabId = normalized, family = engine.family)
     }
 
-    /** URL 清洗：模型偶发把 URL 包在反引号或首尾空白里（`https://x.test`），剥离后再交给引擎。 */
-    private fun sanitizeUrl(raw: String?): String =
-        raw?.trim()?.trim('`')?.trim().orEmpty()
+    /** URL 清洗：剥离首尾空白与反引号，并拒绝 javascript:/data: 等可执行 scheme。 */
+    private fun sanitizeUrl(raw: String?): String {
+        val trimmed = raw?.trim()?.trim('`')?.trim().orEmpty()
+        if (trimmed.isEmpty()) return ""
+        val lower = trimmed.lowercase()
+        // 仅允许 http/https/about/blob，拒绝 javascript:/data:/file: 等可执行 scheme
+        val allowedSchemes = listOf("http://", "https://", "about:", "blob:", "http%3a", "https%3a")
+        return if (allowedSchemes.any { lower.startsWith(it) } || (!lower.contains("://") && !lower.startsWith("about:"))) {
+            trimmed
+        } else {
+            ""
+        }
+    }
 
     private fun pickEngine(token: BrowserSessionToken): BrowserEngine? {
         return engineSelector(token) ?: engines.firstOrNull()

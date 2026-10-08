@@ -72,7 +72,7 @@ object PlannerProtocolParser {
             }
             "REPLAN" -> {
                 val reason = if (thought.isNotBlank()) thought else "规划方案微调"
-                val planList = parsePlanArray(parsed) ?: currentSteps
+                val planList = parsePlanArray(parsed) ?: currentSteps.toList()
                 PlannerDecision.Replan(reason = reason, newSteps = planList)
             }
             "INIT_PLAN" -> {
@@ -85,7 +85,7 @@ object PlannerProtocolParser {
                         val step = parseStepObject(stepObj, defaultId = "step_1", defaultInstruction = thought)
                         PlannerDecision.ExecuteStep(step = step, updatedPlan = currentSteps + step)
                     } else {
-                        PlannerDecision.InitializePlan(thought = thought, plan = currentSteps)
+                        PlannerDecision.InitializePlan(thought = thought, plan = currentSteps.toList())
                     }
                 }
             }

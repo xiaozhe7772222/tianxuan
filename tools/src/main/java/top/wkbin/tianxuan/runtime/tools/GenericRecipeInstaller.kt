@@ -279,7 +279,9 @@ class GenericRecipeInstaller(
             ?.replace("\$PATH", runtimePath)
             ?: runtimePath
         val payloadPath = localPayload ?: if (manifest.source == "LOCAL") "/opt/tianxuan/imports/$toolId" else null
-        return providerManager.environment().filterKeys { it != "PATH" } +
+        // 第三方工具安装/运行环境不注入 Provider API Key：任意 manifest 的安装脚本
+        // 都可读取环境变量，Key 只应提供给受信任的官方工具（CodexToolInstaller 等）。
+        return providerManager.environment(allowedVarNames = emptySet()).filterKeys { it != "PATH" } +
             manifest.environment.filterKeys { it != "PATH" } +
             mapOf(
                 "TIANXUAN_TOOL_ID" to toolId,

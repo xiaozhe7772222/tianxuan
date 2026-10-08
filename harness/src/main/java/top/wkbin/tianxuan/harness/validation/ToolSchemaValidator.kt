@@ -314,6 +314,11 @@ object ToolSchemaValidator {
                 }
             }
         }
+
+        // 嵌套对象属性：递归校验 properties/required，防止 schema 绕过
+        if (value is JsonObject) {
+            problems += validateObject(schema, value, prefix)
+        }
         return problems
     }
 

@@ -116,6 +116,8 @@ class DualAgentCoordinator(
             val plannerResult = runCatching {
                 providerClient.chat(effectivePlannerModel, plannerMessages)
             }.getOrElse { throwable ->
+                // 协程取消（用户点停止）必须传播，不能被当成模型故障回灌主循环。
+                if (throwable is kotlinx.coroutines.CancellationException) throw throwable
                 return@withContext DualAgentOutcome.Failed(
                     message = "Planner 模型调用失败：${throwable.message}",
                     plan = steps,

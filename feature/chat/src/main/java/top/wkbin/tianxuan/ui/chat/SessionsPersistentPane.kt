@@ -86,7 +86,7 @@ internal fun SessionsPersistentPane(
 
     val density = LocalDensity.current
     // 拖拽过程中的实时宽度：放在本地 state 里，松手才上报，避免每帧写 DataStore
-    var liveWidthDp by rememberSaveable { mutableStateOf(resolvedWidth) }
+    var liveWidthDp by remember(resolvedWidth) { mutableStateOf(resolvedWidth) }
     var dragWidthDp by remember { mutableStateOf<Int?>(null) }
     val effectiveWidth = dragWidthDp ?: liveWidthDp
 

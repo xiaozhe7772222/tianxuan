@@ -13,6 +13,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
@@ -107,11 +108,15 @@ class NativePtySession(
         if (closed.compareAndSet(false, true)) {
             readerJob.cancel()
             sessionScope.cancel()
-            // SIGHUP 让 shell 优雅退出；proot --kill-on-exit 负责整棵进程树。
-            NativePty.killPid(childPid, 1)
-            // 硬停止兜底：setsid 后 -pid 覆盖整个会话进程组。
-            NativePty.killPid(childPid, 9)
-            NativePty.waitPid(childPid)
+            // 探活防止 PID 复用后误杀无关进程；SIGHUP + grace + SIGKILL 让 shell 优雅退出
+            if (NativePty.killPid(childPid, 0) == 0) {
+                NativePty.killPid(childPid, 1) // SIGHUP
+                delay(500) // 给 SIGHUP 优雅退出留窗口
+                if (NativePty.killPid(childPid, 0) == 0) {
+                    NativePty.killPid(childPid, 9) // SIGKILL 兜底
+                }
+                NativePty.waitPid(childPid)
+            }
             NativePty.closeFd(masterFd)
             outputChannel.close()
             runCatching { cleanupCallback() }

@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +55,7 @@ fun SettingsScreen(
     onOpenAboutCommunity: () -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenA2uiPoc: () -> Unit = {},
+    onOpenKnowledge: () -> Unit = {},
     viewModel: SettingsViewModel = koinViewModel(),
 ) {
     val models by viewModel.models.collectAsStateWithLifecycle()
@@ -190,16 +193,25 @@ fun SettingsScreen(
             // 4.5 开发者实验功能：A2UI 渲染器 PoC（仅诊断模式可见）
             if (developer) {
                 item {
-                    SettingsCategoryCard(
-                        icon = RuntimeIconName.Sparkles,
-                        accent = MaterialTheme.colorScheme.tertiary,
-                        title = "A2UI 渲染器 PoC",
-                        subtitle = "智能体把回答画成原生界面卡片 · 点开可体验示例",
-                        badge = "实验功能",
-                        onClick = onOpenA2uiPoc,
-                    )
-                }
+                SettingsCategoryCard(
+                    icon = RuntimeIconName.Sparkles,
+                    accent = MaterialTheme.colorScheme.tertiary,
+                    title = "A2UI 渲染器 PoC",
+                    subtitle = "智能体把回答画成原生界面卡片 · 点开可体验示例",
+                    badge = "实验功能",
+                    onClick = onOpenA2uiPoc,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                SettingsCategoryCard(
+                    icon = RuntimeIconName.Document,
+                    accent = MaterialTheme.colorScheme.secondary,
+                    title = "RAG 知识库",
+                    subtitle = "向量化检索增强 · 自动注入对话上下文 · 支持 @kb:文档名 手动引用",
+                    badge = "AI 增强",
+                    onClick = onOpenKnowledge,
+                )
             }
+        }
 
             // 5. 关于、更新与官方社区
             item {

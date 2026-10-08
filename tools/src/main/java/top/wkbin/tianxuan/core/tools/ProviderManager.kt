@@ -14,7 +14,14 @@ open class ProviderManager {
         this.providerRepository = null
     }
 
-    open suspend fun environment(): Map<String, String> {
+    /**
+     * 组装 Provider 环境变量（API Key / baseUrl / model）。
+     *
+     * @param allowedVarNames 允许注入的变量名白名单；null 表示注入全部（仅限受信任的
+     *                        官方工具，如 Codex）；第三方工具安装脚本应传受限集，
+     *                        避免用户 API Key 被任意 manifest 读取。
+     */
+    open suspend fun environment(allowedVarNames: Set<String>? = null): Map<String, String> {
         val repo = providerRepository ?: return emptyMap()
         val provider = repo.provider.first().trim().lowercase()
         val apiKey = repo.readApiKey()
@@ -29,14 +36,19 @@ open class ProviderManager {
             "openrouter" -> "OPENROUTER_API_KEY"
             else -> null
         }
-        if (!apiKey.isNullOrBlank() && variable != null) environment[variable] = apiKey
+        fun allowed(name: String): Boolean = allowedVarNames == null || name in allowedVarNames
+        if (!apiKey.isNullOrBlank() && variable != null && allowed(variable)) environment[variable] = apiKey
         if (baseUrl.isNotBlank() && ProviderEndpointPolicy.isSafeBaseUrl(baseUrl)) {
-            environment["LINUXAI_BASE_URL"] = baseUrl
-            providerEnvironmentName(provider, "BASE_URL")?.let { environment[it] = baseUrl }
+            if (allowed("LINUXAI_BASE_URL")) environment["LINUXAI_BASE_URL"] = baseUrl
+            providerEnvironmentName(provider, "BASE_URL")?.let {
+                if (allowed(it)) environment[it] = baseUrl
+            }
         }
         if (model.isNotBlank()) {
-            environment["LINUXAI_MODEL"] = model
-            providerEnvironmentName(provider, "MODEL")?.let { environment[it] = model }
+            if (allowed("LINUXAI_MODEL")) environment["LINUXAI_MODEL"] = model
+            providerEnvironmentName(provider, "MODEL")?.let {
+                if (allowed(it)) environment[it] = model
+            }
         }
         return environment
     }

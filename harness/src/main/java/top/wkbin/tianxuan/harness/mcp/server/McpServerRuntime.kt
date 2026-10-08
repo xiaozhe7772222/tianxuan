@@ -108,6 +108,16 @@ class McpServerRuntime(
                             return@post
                         }
                         val body = call.receiveText()
+                        // 限制请求体大小：loopback 上任意 App 持 token 都能 POST /mcp，
+                        // 无上限的 receiveText 可被大 body 撑爆堆（OOM）。4MB 足够 JSON-RPC 消息。
+                        if (body.length > MAX_REQUEST_BODY_BYTES) {
+                            call.respondText(
+                                """{"error":"request body too large"}""",
+                                ContentType.Application.Json,
+                                HttpStatusCode.PayloadTooLarge,
+                            )
+                            return@post
+                        }
                         val payload = handleJsonRpc(body)
                         if (payload == null) {
                             // JSON-RPC notification（无 id）：不返回响应体，仅回 202 Accepted
@@ -260,6 +270,9 @@ class McpServerRuntime(
         const val AGENT_SERVER_NAME = "TianXuan Agent MCP Server"
 
         const val defaultPort = 8787
+
+        /** POST /mcp 请求体上限：4MB（足够 JSON-RPC 消息，防止 OOM）。 */
+        const val MAX_REQUEST_BODY_BYTES = 4 * 1024 * 1024
 
         /** 被控端默认端口段起点：与浏览器端 8787 段互不重叠。 */
         const val agentDefaultPort = 8890

@@ -414,7 +414,7 @@ private fun DaemonServiceCard(
                 RuntimeButton(
                     onClick = {
                         val creds = "${state.webUsername} / ${state.webPassword}"
-                        copyToClipboard(context, creds, "CC-Switch 凭据", "已复制登录凭据: $creds")
+                        copyToClipboard(context, creds, "CC-Switch 凭据", "已复制登录凭据")
                         onOpenWebConsole()
                     },
                     modifier = Modifier.weight(1f),

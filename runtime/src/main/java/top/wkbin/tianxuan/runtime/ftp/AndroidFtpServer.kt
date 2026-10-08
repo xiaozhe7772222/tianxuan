@@ -67,7 +67,14 @@ class AndroidFtpServer(
 
     fun start() {
         if (!running.compareAndSet(false, true)) return
-        val server = bindServerSocketWithRetry(config.port)
+        val server = try {
+            bindServerSocketWithRetry(config.port)
+        } catch (e: Exception) {
+            // 绑定失败必须回滚 running 标志，否则服务永远处于"假运行"状态，
+            // 后续 start() 直接 return，UI 显示运行中但端口未监听。
+            running.set(false)
+            throw e
+        }
         serverSocket = server
         onLog("FTP 服务已在端口 ${config.port} 启动")
 

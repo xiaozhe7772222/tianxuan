@@ -309,5 +309,6 @@ internal fun buildCreateKeystoreCommand(
     append(" -validity ").append(validityYears.coerceIn(1, 100) * 365)
     append(" -storepass '").append(storePassword.replace('\'', ' ')).append('\'')
     append(" -keypass '").append(keyPassword.replace('\'', ' ')).append('\'')
-    append(" -dname \"").append(dname.replace('\"', ' ')).append('\"')
+    // 单引号包裹并转义单引号：双引号内的 $、`、${} 会被 shell 展开（命令注入），单引号不会
+    append(" -dname '").append(dname.replace("'", "'\\''")).append('\'')
 }

@@ -407,8 +407,12 @@ class HostBridge(
                 "/storage/emulated/0"
             trimmed.startsWith("/storage/emulated/0/") ->
                 trimmed // 已经是宿主存储路径
-            trimmed.startsWith("/workspace/") ->
-                File(pathManager.workspaceDir, trimmed.removePrefix("/workspace/")).absolutePath
+            trimmed.startsWith("/workspace/") -> {
+                // canonicalize 并校验仍位于 workspaceDir 内，防止 ../ 越出映射根
+                val root = pathManager.workspaceDir.canonicalPath
+                val resolved = File(pathManager.workspaceDir, trimmed.removePrefix("/workspace/")).canonicalPath
+                if (resolved == root || resolved.startsWith(root + File.separator)) resolved else root
+            }
             trimmed == "/workspace" ->
                 pathManager.workspaceDir.absolutePath
             trimmed.startsWith("/attachments/") ->
@@ -416,12 +420,13 @@ class HostBridge(
             trimmed == "/attachments" ->
                 pathManager.attachmentsDir.absolutePath
             else -> {
-                // 若为相对路径或去除了开头的斜杠，先在工作区内检查是否存在
+                // 相对路径或去除开头的斜杠：仅当解析后仍在 workspaceDir 内时才视为工作区文件
                 val wsRelative = File(pathManager.workspaceDir, trimmed.removePrefix("/"))
-                if (wsRelative.exists()) {
+                val root = pathManager.workspaceDir.canonicalPath
+                if (wsRelative.exists() && wsRelative.canonicalPath.startsWith(root + File.separator)) {
                     wsRelative.absolutePath
                 } else {
-                    trimmed // 原样返回（可能是宿主绝对路径）
+                    trimmed // 宿主绝对路径（如 /data/app/...），交由调用处校验
                 }
             }
         }

@@ -811,10 +811,12 @@ internal suspend fun paginateSubagentSummary(
     val spillDir = ".tianxuan-subagent"
     val spilled = mutableMapOf<String, String>() // laneName -> 相对路径
     overflowTasks.forEach { outcome ->
-        val fileName = outcome.subSessionId
+        val safeId = outcome.subSessionId
             .filter { it.isLetterOrDigit() || it == '-' || it == ':' }
             .replace(':', '-')
-            .takeLast(80) + ".md"
+            .takeLast(80)
+        // subSessionId 为空时（角色未匹配/解析失败）的防御：用 UUID 后缀避免坍缩为 .md
+        val fileName = if (safeId.isBlank()) "task-${java.util.UUID.randomUUID().toString().take(8)}.md" else "$safeId.md"
         val relativePath = "$spillDir/$fileName"
         // 落盘失败不阻塞：该任务按普通截断处理
         if (fileAccess.write(relativePath, outcome.summary) is top.wkbin.tianxuan.core.common.result.AppResult.Success) {

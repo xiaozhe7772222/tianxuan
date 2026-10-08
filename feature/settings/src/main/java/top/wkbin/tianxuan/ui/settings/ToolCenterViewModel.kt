@@ -162,10 +162,15 @@ class ToolCenterViewModel(
         }
     }
 
+    // 记录当前日志收集 Job：切换 toolId 或关闭日志时取消旧 collector，避免新旧工具日志串台。
+    private var logCollectionJob: kotlinx.coroutines.Job? = null
+
     fun viewLogs(toolId: String?) {
         _viewingLogsToolId.value = toolId
+        logCollectionJob?.cancel()
+        logCollectionJob = null
         if (toolId != null) {
-            viewModelScope.launch {
+            logCollectionJob = viewModelScope.launch {
                 toolManager.observeInstallLogs(toolId).collect { logs ->
                     _toolLogs.value = logs
                 }

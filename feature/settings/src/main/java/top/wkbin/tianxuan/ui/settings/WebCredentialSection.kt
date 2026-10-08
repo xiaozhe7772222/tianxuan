@@ -48,7 +48,7 @@ internal fun WebCredentialSection(
             RuntimeTextButton(
                 onClick = {
                     val creds = "$username / $password"
-                    copyToClipboard(context, creds, "CC-Switch 凭据", "已复制控制台账号密码: $creds")
+                    copyToClipboard(context, creds, "CC-Switch 凭据", "已复制控制台凭据")
                 },
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
             ) {

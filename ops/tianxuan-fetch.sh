@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 天玄离线插件包下载器
 # 由 systemd tianxuan-fetch.service 承载；与既有服务完全隔离。
-set -uo pipefail
+set -euo pipefail
 
 DEST="/opt/tianxuan-offline"
 MANIFEST="/tmp/tianxuan-manifest.tsv"
@@ -39,4 +39,4 @@ while IFS=$'\t' read -r size name url; do
 done < "$MANIFEST"
 
 echo "[$(date -Is)] ALL DONE, failures=$fail" >> "$LOG"
-exit 0
+exit $((fail > 0))

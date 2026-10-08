@@ -18,6 +18,7 @@ import top.wkbin.tianxuan.core.database.HarnessRuntimeDao
 import top.wkbin.tianxuan.core.database.HarnessSessionDao
 import top.wkbin.tianxuan.core.database.InstallLogDao
 import top.wkbin.tianxuan.core.database.InstallTaskDao
+import top.wkbin.tianxuan.core.database.KnowledgeDao
 import top.wkbin.tianxuan.core.database.McpOAuthCredentialDao
 import top.wkbin.tianxuan.core.database.McpOAuthTransactionDao
 import top.wkbin.tianxuan.core.database.McpServerDao
@@ -159,6 +160,12 @@ val appModule = module {
     single<AndroidAppDao> { provideAndroidAppDao(database = get()) }
 
     single<BuildScriptDao> { provideBuildScriptDao(database = get()) }
+
+    single<KnowledgeDao> { get<AppDatabase>().knowledgeDao() }
+
+    single<top.wkbin.tianxuan.core.database.KnowledgeRepository> {
+        top.wkbin.tianxuan.core.database.RoomKnowledgeRepository(dao = get())
+    }
 
     single<AgentTaskDao> { provideAgentTaskDao(database = get()) }
 

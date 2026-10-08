@@ -50,8 +50,16 @@ class InstallTransactionManager(
             .sortedByDescending { it.lastModified() }
         val target = File(pathManager.tianxuanToolsDir(safeDistro), toolId)
         if (preserveExisting && candidates.isNotEmpty()) {
+            // 先拷贝到临时目录再替换：避免 copy 抛异常时旧数据已先被删除
+            val restoreTarget = File(target.parentFile, "${toolId}.restore-${System.currentTimeMillis()}")
+            SafeFileTree.copy(candidates.first(), restoreTarget)
             safeDelete(target, "recover($safeDistro:$toolId) target")
-            SafeFileTree.copy(candidates.first(), target)
+            if (!restoreTarget.renameTo(target)) {
+                restoreTarget.deleteRecursively()
+                throw IllegalStateException(
+                    "恢复目录重命名失败: ${restoreTarget.absolutePath} -> ${target.absolutePath}"
+                )
+            }
         } else if (!preserveExisting) {
             safeDelete(target, "recover($safeDistro:$toolId) target")
         }

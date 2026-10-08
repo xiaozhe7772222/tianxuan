@@ -282,7 +282,7 @@ class McpManager(
         cancellableResult { transport(bound).execute(bound, tool.name, arguments) }
             .onFailure { logger.e("MCP[${server.name}] 工具 ${tool.name} 执行异常: ${it.message}", it) }
             .onSuccess { (ok, output) ->
-                if (!ok) logger.w("MCP[${server.name}] 工具 ${tool.name} 返回错误: $output".take(500))
+                if (!ok) logger.w("MCP[${server.name}] 工具 ${tool.name} 返回错误: ${secretRedactor.redact(output.take(500))}")
             }
             .getOrElse { false to "MCP 工具执行异常：${it.message ?: it::class.simpleName}" }
     }
@@ -335,7 +335,7 @@ class McpManager(
         return@withContext cancellableResult { transport(bound).execute(bound, tool.name, arguments) }
             .onFailure { logger.e("MCP[${server.name}] 工具 ${tool.name} 执行异常: ${it.message}", it) }
             .onSuccess { (ok, output) ->
-                if (!ok) logger.w("MCP[${server.name}] 工具 ${tool.name} 返回错误: $output".take(500))
+                if (!ok) logger.w("MCP[${server.name}] 工具 ${tool.name} 返回错误: ${secretRedactor.redact(output.take(500))}")
             }
             .getOrElse { false to "MCP 工具执行异常：${it.message ?: it::class.simpleName}" }
     }
@@ -407,6 +407,9 @@ class McpManager(
     }
 
     private companion object {
+        // 工具错误输出可能含敏感信息（环境变量/密钥片段），日志前先脱敏。
+        private val secretRedactor = top.wkbin.tianxuan.core.security.SecretRedactor()
+
         /** 单服务器工具发现总超时：覆盖沙箱会话拉起 + initialize + tools/list，超时即本轮跳过注入。 */
         const val DISCOVERY_TIMEOUT_MS = 8_000L
 

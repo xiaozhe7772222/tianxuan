@@ -107,5 +107,6 @@ include(":feature:browser")
 include(":feature:git")
 include(":feature:a2uipoc")
 include(":feature:preview")
+include(":feature:knowledge")
 // Shower 虚拟屏客户端库（源自 Operit，LGPL-3.0，并入后按 GPL-3.0 分发）；独立成模块以保持来源边界清晰。
 include(":showerclient")

@@ -124,7 +124,9 @@ class ToolExecutor(
                 // 一次查询同时取审批模式与运行意图（两级：会话级优先，回落全局默认）。
                 val session = sessionDao?.findById(sessionId)
                 val sessionMode = session?.approvalMode?.let(ApprovalMode::fromId)
-                val mode = sessionMode ?: repository?.currentMode() ?: ApprovalMode.FULL_ACCESS
+                // fail-closed：审批仓库未注入或会话无 mode 时默认 REQUEST（每写操作需审批），
+                // 而非 FULL_ACCESS（写操作免审批）。防止未来装配遗漏导致写操作免审。
+                val mode = sessionMode ?: repository?.currentMode() ?: ApprovalMode.REQUEST
                 val runMode = session?.runMode?.let(RunMode::fromId) ?: repository?.currentRunMode() ?: RunMode.BUILD
                 // PLAN 只读模式与审批模式正交：命中即硬拒绝，不进审批队列（用户没打算执行，
                 // 弹审批卡只是噪音）。子智能体 Lane 复用父会话 id（见 SubagentLaneRunner），
