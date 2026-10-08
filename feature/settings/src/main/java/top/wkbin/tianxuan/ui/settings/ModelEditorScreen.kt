@@ -326,7 +326,9 @@ private fun ModelEditorContent(
         (parsedContextTokens == null || parsedContextTokens <= 0)
     val tokenWindowInvalid = parsedMaxTokens != null && effectiveContextTokens != null &&
         parsedMaxTokens > effectiveContextTokens
-    val tokenFieldsValid = !maxTokensInvalid && !contextTokensInvalid && !tokenWindowInvalid
+    // tokenWindowInvalid 仅作 UI 警告（autoContextTokens 对部分模型解析不准，硬阻断会让
+    // 用户填了合理 maxTokens 后保存按钮点不动）；格式错误仍硬阻断。
+    val tokenFieldsValid = !maxTokensInvalid && !contextTokensInvalid
     var compactionKeepRecentText by rememberSaveable(modelId) {
         mutableStateOf(existing?.compactionKeepRecentTokens?.toString().orEmpty())
     }
