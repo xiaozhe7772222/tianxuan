@@ -5,7 +5,7 @@ import top.wkbin.tianxuan.core.database.AgentContextRepository
 import top.wkbin.tianxuan.core.database.AgentMemoryEntity
 
 /**
- * 逐轮记忆召回器（低权威背景资料层，对齐 Reasonix Context Engine v2 的 recall 语义）。
+ * 逐轮记忆召回器（低权威背景资料层）。
  *
  * 检索：BM25 + **CJK 字符 bigram**（要求真实词重叠，而非散落常用字误命中；拉丁词按整词小写）。
  * project 事实小幅加权；stale 按 updatedAt 年龄降权（降权不删除）；泛化轮次（"继续""ok"）
@@ -96,7 +96,7 @@ class MemoryRecallSelector(
 
     companion object {
         private const val MAX_RECALL_CANDIDATES = 64
-        /** 注入条数预算（对齐 Reasonix 的 ≤4 条口径，略放宽为 5）。 */
+        /** 注入条数预算（上限 5 条）。 */
         internal const val MAX_RECALL_FACTS = 5
         internal const val MAX_PROMPT_MEMORY_KEY_CHARS = 128
         internal const val MAX_PROMPT_MEMORY_VALUE_CHARS = 512

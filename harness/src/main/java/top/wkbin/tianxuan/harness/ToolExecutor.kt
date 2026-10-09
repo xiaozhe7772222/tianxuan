@@ -959,7 +959,7 @@ class ToolExecutor(
     }
 
     /**
-     * compress 工具（对齐 Reasonix）：用户明确要求压缩上下文时，把指定边界之前的历史
+     * compress 工具：用户明确要求压缩上下文时，把指定边界之前的历史
      * 折叠为结构化摘要。anchor 必须原样、唯一地摘自某条用户消息——多匹配/零匹配都拒绝，
      * 让模型换更长的摘录重试，而不是猜一个边界静默压错地方。走与自动压缩相同的
      * cache-replay 摘要路径；原文不丢，仍可 history_read 回读。
@@ -1077,7 +1077,7 @@ class ToolExecutor(
 
 
     /**
-     * use_capability 统一代理的分发（对齐 Reasonix）：
+     * use_capability 统一代理的分发：
      * - list：列出已启用的服务与缓存工具数，**不启动任何服务器进程**；
      * - inspect：查看某服务的工具清单与参数（缓存为空时按需发现一次——模型必须拿到
      *   完整清单才能构造 call；失败时回 getLastError 给出可读原因）；

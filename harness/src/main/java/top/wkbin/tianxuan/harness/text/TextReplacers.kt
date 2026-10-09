@@ -1,7 +1,7 @@
 package top.wkbin.tianxuan.harness.text
 
 /**
- * 分级容错文本替换引擎（对标 RikkaHub `TextReplacers.kt`）。
+ * 分级容错文本替换引擎。
  *
  * 大模型生成代码修改时经常出现与文件原文的微小偏差：
  * - 缩进多/少一两个空格、制表符与空格混用；
@@ -68,7 +68,7 @@ object ExactReplacer : TextReplacer {
 /**
  * 行窗口匹配基类：按行切分后滑动窗口，命中后按目标文件真实缩进对 newText 重排。
  *
- * 尾随空行的处理与 RikkaHub 对齐：模型给出的 oldText 常以换行结尾，切行后会多出
+ * 尾随空行的处理：模型给出的 oldText 常以换行结尾，切行后会多出
  * 一个空串，需要丢弃；对应的 newText 尾随换行也一并去掉，避免替换区间吞掉分隔换行。
  */
 abstract class LineWindowReplacer : TextReplacer {

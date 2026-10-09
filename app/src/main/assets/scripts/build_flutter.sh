@@ -1,6 +1,6 @@
 #!/bin/sh
 # ==============================================================================
-# TianXuan (LinuxAIRuntime) - Flutter Project One-Key Build Engine
+# TianXuan - Flutter Project One-Key Build Engine
 # Usage: build_flutter.sh <project_path> [target]
 # ==============================================================================
 set -e

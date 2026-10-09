@@ -79,7 +79,7 @@ data class SkillManifest(
 )
 
 /**
- * 声明式提示词模板解构集合（对标 PalmClaw 标准）。
+ * 声明式提示词模板解构集合（对标天玄标准）。
  */
 @Serializable
 data class PromptTemplateBundle(

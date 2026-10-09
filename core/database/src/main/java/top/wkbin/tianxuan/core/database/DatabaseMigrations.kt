@@ -152,7 +152,7 @@ val MIGRATION_42_43 = object : Migration(42, 43) {
 }
 
 /**
- * 记忆语义扩展（Reasonix Context Engine v2）：主题冲突去重 / revision / pinned / 新鲜度。
+ * 记忆语义扩展：主题冲突去重 / revision / pinned / 新鲜度。
  * 存量记忆打 subjectKey=原 key、revision=1、fresh，保证无损升级且幂等。
  */
 val MIGRATION_43_44 = object : Migration(43, 44) {

@@ -1,6 +1,6 @@
 #!/bin/sh
 # ==============================================================================
-# TianXuan (LinuxAIRuntime) - Android Core Development Environment Setup
+# TianXuan - Android Core Development Environment Setup
 # ------------------------------------------------------------------------------
 # 由【Android & 移动全栈开发套件 · android-core】组件在插件安装阶段一次性执行。
 # ==============================================================================

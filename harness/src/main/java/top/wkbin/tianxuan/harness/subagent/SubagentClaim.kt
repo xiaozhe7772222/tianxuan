@@ -12,7 +12,7 @@ import top.wkbin.tianxuan.harness.ToolResult
 import top.wkbin.tianxuan.harness.normalizeWritePath
 
 /**
- * 子智能体完成 claim 的 host 裁定（对齐 Reasonix 的 complete_subtask 语义）。
+ * 子智能体完成 claim 的 host 裁定。
  *
  * 模型提交的 status 是**主张**，不是事实。交给父智能体之前，host 用自己落库的
  * lane transcript receipts 逐条核验 acceptance_criteria：

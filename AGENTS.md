@@ -1,4 +1,4 @@
-# 🧭 天玄 (TianXuan / LinuxAIRuntime) — AI 导航入口
+# 🧭 天玄 (TianXuan) — AI 导航入口
 
 > 本文件为导航入口，默认载入。全部细节（技术栈 / 模块拓扑 / 调用链路 / 文件索引 / 铁律 / 命令）在 [`docs/AI_NAVIGATION.md`](docs/AI_NAVIGATION.md)，按需读取。
 

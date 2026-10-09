@@ -103,7 +103,7 @@ class TianXuanApplication : Application(), Configuration.Provider {
                     runCatching {
                         val skillRepository = agentSkillRepositoryLazy.value
                         skillRepository.ensureInitialized()
-                        // 批量自动发现：把 rikkahub / aicode 等工具的 skills 目录整体复制到
+                        // 批量自动发现：把外部工具的 skills 目录整体复制到
                         // attachments/skills 或工作区 skills 目录后，重启即可全部导入；
                         // 按 resourcePath 去重，重复扫描安全。
                         val pathManager = pathManagerLazy.value

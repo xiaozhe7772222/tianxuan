@@ -201,7 +201,11 @@ fun SettingsScreen(
                     badge = "实验功能",
                     onClick = onOpenA2uiPoc,
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+            }
+            }
+
+            // 4.6 RAG 知识库：对全部用户可见（非诊断功能）
+            item {
                 SettingsCategoryCard(
                     icon = RuntimeIconName.Document,
                     accent = MaterialTheme.colorScheme.secondary,
@@ -211,7 +215,6 @@ fun SettingsScreen(
                     onClick = onOpenKnowledge,
                 )
             }
-        }
 
             // 5. 关于、更新与官方社区
             item {

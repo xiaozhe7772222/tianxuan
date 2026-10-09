@@ -182,7 +182,7 @@ class ApiContextAssembler(
             if (computedKeepFromIndex > 0) {
                 // LLM 结构化压缩摘要（pi 式）：当前模型生成，失败回退机械摘要。
                 // summaryContext 让摘要请求重放主对话的 system + 摘要层 + 原始消息前缀，
-                // 命中 provider KV 缓存（cache-replay 形状，对齐 Reasonix）。
+                // 命中 provider KV 缓存（cache-replay 形状）。
                 compactedContext = compactionManager.compact(
                     sessId,
                     compactedContext,

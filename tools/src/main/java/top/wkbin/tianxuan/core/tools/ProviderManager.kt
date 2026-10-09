@@ -39,13 +39,13 @@ open class ProviderManager {
         fun allowed(name: String): Boolean = allowedVarNames == null || name in allowedVarNames
         if (!apiKey.isNullOrBlank() && variable != null && allowed(variable)) environment[variable] = apiKey
         if (baseUrl.isNotBlank() && ProviderEndpointPolicy.isSafeBaseUrl(baseUrl)) {
-            if (allowed("LINUXAI_BASE_URL")) environment["LINUXAI_BASE_URL"] = baseUrl
+            if (allowed("TIANXUAN_BASE_URL")) environment["TIANXUAN_BASE_URL"] = baseUrl
             providerEnvironmentName(provider, "BASE_URL")?.let {
                 if (allowed(it)) environment[it] = baseUrl
             }
         }
         if (model.isNotBlank()) {
-            if (allowed("LINUXAI_MODEL")) environment["LINUXAI_MODEL"] = model
+            if (allowed("TIANXUAN_MODEL")) environment["TIANXUAN_MODEL"] = model
             providerEnvironmentName(provider, "MODEL")?.let {
                 if (allowed(it)) environment[it] = model
             }

@@ -32,7 +32,7 @@ sealed interface TurnSchedulingState {
 }
 
 /**
- * 会话级并发排队与调度中枢接口（借鉴 PalmClaw SessionTurnCoordinator 设计）。
+ * 会话级并发排队与调度中枢接口（基于天玄会话轮次协调器设计）。
  *
  * 核心职责：
  * 1. **Per-Session 串行化**：确保同一会话内的 Agent 轮次严格串行，具备引用计数清理，杜绝锁对象内存泄漏；

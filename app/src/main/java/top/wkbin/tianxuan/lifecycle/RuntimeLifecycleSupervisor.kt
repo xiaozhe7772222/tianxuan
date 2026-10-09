@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * 进程级算力保活协调者（P0 借鉴自 PalmClaw GatewayRuntimeSupervisor）。
+ * 进程级算力保活协调者（P0 基于天玄运行时生命周期监督器设计）。
  *
  * ## 设计原则
  * 全进程持有**唯一一个** WakeLock 与 WifiLock。任何需要后台保活的模块

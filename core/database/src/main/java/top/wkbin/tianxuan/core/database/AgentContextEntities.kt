@@ -9,7 +9,7 @@ import androidx.room.PrimaryKey
  * 长期语义与事实记忆实体
  * 用于记录用户的长期偏好、项目架构规范、全局事实。
  *
- * 基于 Reasonix Context Engine v2 语义扩展：
+ * 语义扩展：
  * - subjectKey: 主题冲突去重键（如 "project.package_manager"）
  * - revision: 不可变修订版本号（每次修改+1）
  * - pinned: 是否钉选到 system prompt 稳定前缀（正交于检索召回）

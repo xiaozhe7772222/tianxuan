@@ -521,7 +521,7 @@ class SubagentOrchestrator(
 }
 
 /**
- * 单个子代理 lane 的 token 用量（对齐 Reasonix 的委托经济学口径）：
+ * 单个子代理 lane 的 token 用量：
  * 缓存命中单列，让"委派是否划算"有数据可看，而不是只看轮数。
  */
 internal data class SubagentTokenUsage(

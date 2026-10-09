@@ -1,6 +1,6 @@
 #!/bin/sh
 # ==============================================================================
-# TianXuan (LinuxAIRuntime) - Node.js Package Managers (pnpm / yarn) Setup
+# TianXuan - Node.js Package Managers (pnpm / yarn) Setup
 # ==============================================================================
 set -e
 

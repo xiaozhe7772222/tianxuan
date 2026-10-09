@@ -1358,7 +1358,7 @@ class HarnessLoop(
                 }
                 consecutiveFailures++
                 metrics.consecutiveFailuresObserved(consecutiveFailures)
-                // 软收敛提示（storm breaker，对齐 Reasonix）：早于硬熔断的一次性 steering 注入，
+                // 软收敛提示（storm breaker）：早于硬熔断的一次性 steering 注入，
                 // 让模型在"连续失败"与"被硬停"之间有一次换方法自纠的机会。成功即清零、
                 // 每次运行只提示一次；硬阈值被用户调低到软阈值之下时自然不触发。
                 if (!stormHintInjected &&

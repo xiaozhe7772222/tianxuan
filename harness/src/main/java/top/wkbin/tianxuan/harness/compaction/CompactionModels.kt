@@ -79,7 +79,7 @@ data class SummaryRequestContext(
     val recallBlocks: Map<String, String> = emptyMap(),
     /**
      * 被折叠区域的 provider 可见形态（截断后的消息前缀，与主对话实际发送的字节一致）。
-     * 对齐 Reasonix「摘要只使用有界 Content、绝不提升 RawContent」的原则；
+     * 摘要只使用有界 Content、绝不提升 RawContent；
      * 为空表示无法字节对齐（重放不可行），摘要器回退独立叙事请求。
      */
     val replayPrefix: List<HarnessMessage> = emptyList(),

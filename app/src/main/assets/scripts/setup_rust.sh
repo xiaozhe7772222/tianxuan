@@ -1,6 +1,6 @@
 #!/bin/sh
 # ==============================================================================
-# TianXuan (LinuxAIRuntime) - Rust & Android JNI Cross Compilation Suite Setup
+# TianXuan - Rust & Android JNI Cross Compilation Suite Setup
 # 支持 Rust ARM64 独立开发包拉取、aarch64-linux-android 交叉编译目标库与 NDK Linker 预绑定
 # ==============================================================================
 set -e

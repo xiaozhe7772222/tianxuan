@@ -456,7 +456,7 @@ private const val HARD_TRUNCATED_RESULT_CHARS = 800
 private const val PROTECTED_RESULT_MAX_CHARS = 16_000
 
 /**
- * 疑似 shell 写命令检测（对齐 Reasonix 的"运行后 host 对比凭据与租约"）：
+ * 疑似 shell 写命令检测：
  * 结构化写（write/edit/download）已有租约闸门，唯一盲区是 base/process 的 shell 写
  * （重定向、sed -i、mv/rm 等无法静态判定路径范围）。这里做**保守的软检测**——
  * 只为父智能体提供可见性（⚠️ 提示复核产物），绝不据此拦截或判失败。

@@ -53,7 +53,7 @@ class HarnessProviderRunner(
     /**
      * 记录本轮 @提及 的能力挂载事件（UI 展示用）。
      *
-     * prefix-cache 稳定性（use_capability 第一步，对齐 Reasonix 的稳定 provider 面）：
+     * prefix-cache 稳定性（use_capability 第一步，稳定 provider 面）：
      * @提及 **不再裁剪** provider 可见的 tools 数组——原实现在有提及的轮次把数组裁到
      * 被提及的 server、下一轮恢复全集，两次字节漂移都会击穿整个前缀缓存；而被击穿
      * 重新计费的代价（全前缀 × 全价）远大于保留全集 schema 的增量 token。提及只产生

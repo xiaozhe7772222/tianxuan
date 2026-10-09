@@ -126,7 +126,7 @@ class ClawHubClient(
         const val DEFAULT_CLAWHUB_URL = "https://raw.githubusercontent.com/tianxuan-ai/clawhub/main"
 
         /**
-         * 内置 5 款精选高质量生态技能（完全对标 PalmClaw / OpenMinis 规范）。
+         * 内置 5 款精选高质量生态技能（完全对标天玄 / OpenMinis 规范）。
          */
         val BUILTIN_PRESET_ITEMS: List<ClawHubMarketItem> = listOf(
             ClawHubMarketItem(
@@ -148,7 +148,7 @@ class ClawHubClient(
                 name = "代码安全与架构审查",
                 version = "1.1.0",
                 description = "针对 Kotlin、Java、Rust、C++ 进行小步精细化审查，识别空指针隐患、内存泄漏与高危系统调用并提供重构建议。",
-                author = "PalmClaw Security Lab",
+                author = "TianXuan Core Team",
                 icon = "ShieldCheck",
                 tags = listOf("安全", "代码审查", "重构", "Architecture"),
                 category = "安全审计",
@@ -262,7 +262,7 @@ class ClawHubClient(
                         name: 代码安全与架构审查
                         version: 1.1.0
                         description: 针对移动端与纯 Kotlin/Java 模块进行静态代码安全与架构审查。
-                        author: PalmClaw Security Lab
+                        author: TianXuan Core Team
                         category: 安全审计
                         tags: 安全, 代码审查, 架构
                         permissions: [file_write]

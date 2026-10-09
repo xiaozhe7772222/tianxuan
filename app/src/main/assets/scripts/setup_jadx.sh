@@ -1,6 +1,6 @@
 #!/bin/sh
 # ==============================================================================
-# TianXuan (LinuxAIRuntime) - JADX-CLI Reverse Engineering Suite Setup
+# TianXuan - JADX-CLI Reverse Engineering Suite Setup
 # 加固版：多镜像重试下载、解包产物完整性校验（bin + lib）、Java 运行时预检。
 # ==============================================================================
 set -e

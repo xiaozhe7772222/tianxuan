@@ -1,7 +1,7 @@
 package top.wkbin.tianxuan.harness
 
 /**
- * 思考流生命周期计时器（对标 RikkaHub 的多通道 StreamChunk 思考流耗时统计）。
+ * 思考流生命周期计时器。
  *
  * 语义：首个 reasoning 增量到达时开始计时；首个正文增量到达时停止；
  * 若 reasoning 结束后一直没有正文（例如只输出 reasoning 或流被截断），

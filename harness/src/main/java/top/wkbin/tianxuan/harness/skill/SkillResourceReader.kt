@@ -3,7 +3,7 @@ package top.wkbin.tianxuan.harness.skill
 import java.io.File
 
 /**
- * 标准 SKILL.md 目录级技能的受限资源读取（对标 RikkaHub `use_skill`）。
+ * 标准 SKILL.md 目录级技能的受限资源读取。
  *
  * 技能目录形态：根目录含 `SKILL.md`（YAML frontmatter + 正文），并可有
  * `references/` 参考资料、`scripts/` 可执行脚本等子资源。系统提示只挂轻量

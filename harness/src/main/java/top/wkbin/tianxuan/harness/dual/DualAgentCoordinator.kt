@@ -23,7 +23,7 @@ import top.wkbin.tianxuan.harness.subagent.SubagentLaneRunner
 /**
  * 双智能体调度中枢（Dual-Agent Coordinator）。
  *
- * 核心设计（借鉴 DeepSeek-Reasonix v2）：
+ * 核心设计：
  * 1. 物理会话隔离：Planner 运行于纯净无工具 Lane，Executor 运行于独立的单步 Lane；
  * 2. 异构模型协同：Planner 使用推理模型深思熟虑，Executor 使用极速模型精准执行；
  * 3. 前缀缓存保护：海量工具日志停留在 Executor 内部，仅提炼紧凑交付物回传 Planner；

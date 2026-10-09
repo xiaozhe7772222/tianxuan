@@ -21,7 +21,7 @@
 
 **难道在手机上，大模型就只能当个“陪聊工具人”？**
 
-为了打破这个现状，我们开发并正式开源了这一款面向移动端的全功能 AI 研发运行时——**天玄 (TianXuan / LinuxAIRuntime)**。
+为了打破这个现状，我们开发并正式开源了这一款面向移动端的全功能 AI 研发运行时——**天玄 (TianXuan)**。
 
 它不搞空头套壳，而是直接把 **免 Root Linux 系统、智能体引擎 (Agent Harness)、C/JNI 原生 PTY 终端与项目工作区** 深度融合。
 
@@ -138,7 +138,7 @@ Android 开发者专属的提效神器：
 天玄不仅仅功能极客，在 Android 工程实现上也严格遵循 Clean Architecture 与工业级模块化规范：
 
 ```text
-LinuxAIRuntime/
+TianXuan/
 ├── app/                  # 宿主壳工程：JNI C/C++ 桥接、Koin 装配、前台保活 Service、悬浮窗服务
 ├── core/
 │   ├── model/           # 纯 Kotlin 数据模型 (Pure Kotlin，严禁任何平台与框架依赖)

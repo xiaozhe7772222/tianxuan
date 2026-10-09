@@ -328,7 +328,7 @@ class FileCheckpointPersistence(
     }
 
     /**
-     * 字节预算（对齐 Reasonix 的 blob quota）：MAX_KEPT 只限轮数，快照是整文件 pre-image，
+     * 字节预算：MAX_KEPT 只限轮数，快照是整文件 pre-image，
      * 长会话反复编辑大文件时总量可能轻松破百 MB——移动端私有目录必须加总量护栏。
      * 超预算按轮号从最旧开始整轮删除（索引 + 内容目录），永不触碰当前轮；
      * 内存态未同步裁剪：本轮内 rewind 仍可用内存快照，重启后按磁盘实况恢复。

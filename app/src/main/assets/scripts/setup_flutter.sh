@@ -1,6 +1,6 @@
 #!/bin/sh
 # ==============================================================================
-# TianXuan (LinuxAIRuntime) - Flutter SDK Environment Setup
+# TianXuan - Flutter SDK Environment Setup
 # ==============================================================================
 set -e
 

@@ -31,7 +31,7 @@ object ToolSchemaValidator {
      * 智能参数解包、键扁平化还原与别名规整：
      * 1. 自动解包单层包裹参数（params/arguments/input）；
      * 2. 自动把双下划线 `__` 或点号 `.` 分隔的扁平化键（例如 options__timeout 或 config.port）
-     *    还原为标准嵌套 JsonObject，兼容小参数量或特定模型打平输出对象的习惯（DeepSeek-Reasonix 规范）；
+     * 还原为标准嵌套 JsonObject，兼容小参数量或特定模型打平输出对象的习惯；
      * 3. 映射常用字段别名（path/command/oldText/newText/timeout_seconds）。
      *
      * [isMcpTool] = true 时 1、2 全部跳过：MCP 工具的参数名由远端 schema 定义，

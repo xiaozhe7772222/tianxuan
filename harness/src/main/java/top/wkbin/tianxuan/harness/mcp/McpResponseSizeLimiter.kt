@@ -8,7 +8,7 @@ import java.io.FileOutputStream
 import java.io.InputStream
 
 /**
- * MCP 协议报文大小熔断与流式转存限制器（借鉴 PalmClaw McpResponseSizeLimiter 设计）。
+ * MCP 协议报文大小熔断与流式转存限制器（基于天玄 MCP 报文大小限制器设计）。
  *
  * ## 移动端内存防御阶梯 (Boundary Defense)
  * 1. **内联安全区 (< 512KB)**：

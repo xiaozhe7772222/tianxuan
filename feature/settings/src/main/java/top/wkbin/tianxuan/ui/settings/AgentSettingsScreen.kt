@@ -513,7 +513,7 @@ fun AgentSettingsScreen(
                     }
                 }
                 Text(
-                    text = "可将 rikkahub、aicode 等工具的 skills 目录整体复制到 attachments/skills 或工作区 skills 目录，重启应用即自动批量导入；运行中复制可点击上方按钮立即扫描，已导入的不会重复注册",
+                    text = "可将外部工具的 skills 目录整体复制到 attachments/skills 或工作区 skills 目录，重启应用即自动批量导入；运行中复制可点击上方按钮立即扫描，已导入的不会重复注册",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp, start = 4.dp),

@@ -101,7 +101,7 @@ class RewindController(
     }
 
     /**
-     * 撤销最近一次 rewind（单层级，对齐 Reasonix 的 UndoRewind）：把文件还原到
+     * 撤销最近一次 rewind（单层级撤销）：把文件还原到
      * rewind 前的磁盘状态。冲突基线是 rewind 实际写入的状态——rewind 之后智能体
      * 又写过文件（capture 使记录失效）或用户再次外部改动，都会跳过对应路径。
      * 对话侧不在 undo 范围：fork 不改动原会话，切回原会话即可。

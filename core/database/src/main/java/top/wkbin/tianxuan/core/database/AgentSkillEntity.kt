@@ -88,7 +88,7 @@ class AgentSkillRepository(
      * 无需通过 ZIP 逐个导入。按 resourcePath 去重，重复调用安全。
      *
      * 嵌套语义：目录树中任何直属含 SKILL.md 的目录都是一个 Skill——既支持
-     * “单个 Skill 目录”，也支持“集合目录（如 rikkahub / aicode 的整个 skills 目录）”，
+     * "单个 Skill 目录"，也支持"集合目录（如外部工具的整个 skills 目录）"，
      * 以及 Skill 目录内再嵌套 Skill 子目录的多级结构。
      *
      * @return 本次新注册的 Skill 列表

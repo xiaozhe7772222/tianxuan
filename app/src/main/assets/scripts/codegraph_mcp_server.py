@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Dependency-free CodeGraph MCP Server for the TianXuan / LinuxAIRuntime sandbox.
+Dependency-free CodeGraph MCP Server for the TianXuan sandbox.
 
 Indexes workspace symbols, call hierarchies, inheritance, and dependencies into SQLite.
 Exposes MCP tools for single-step structural code intelligence (codegraph_explore,

@@ -8,7 +8,7 @@ import top.wkbin.tianxuan.core.model.skill.SkillPermission
 import java.nio.charset.StandardCharsets
 
 /**
- * 技能端侧静态安全审计器（对标 PalmClaw 端侧权限与安全审查体系）。
+ * 技能端侧静态安全审计器（对标天玄端侧权限与安全审查体系）。
  *
  * 审查维度：
  * 1. 结构与打包防御：Zip Slip 路径穿透、解压炸弹、异常 ELF 原生二进制；

@@ -14,7 +14,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 
 /**
- * 技能包标准解构与解析器（对标 PalmClaw 标准目录与声明式模板规范）。
+ * 技能包标准解构与解析器（对标天玄标准目录与声明式模板规范）。
  */
 class SkillPackageParser {
 

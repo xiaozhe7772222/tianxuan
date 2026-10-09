@@ -70,7 +70,7 @@ data class RewindResult(
 )
 
 /**
- * 一次 rewind 的撤销记录（单层级，对齐 Reasonix 的 UndoRewind）：
+ * 一次 rewind 的撤销记录（单层级撤销）：
  * - [applied]：rewind 实际写入/删除的状态（冲突跳过的路径不含在内），undo 时的冲突检测基线；
  * - [undoSnaps]：与 [applied] 按下标对齐的「rewind 前磁盘状态」，undo 据此还原。
  * 对话侧无需 undo：CONVERSATION/BOTH 的 fork 不改动原会话，切回原会话即可。

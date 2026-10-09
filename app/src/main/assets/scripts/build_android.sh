@@ -1,6 +1,6 @@
 #!/bin/sh
 # ==============================================================================
-# TianXuan (LinuxAIRuntime) - Android Project One-Key Build Engine
+# TianXuan - Android Project One-Key Build Engine
 # Usage: build_android.sh <project_path> [task]
 # ------------------------------------------------------------------------------
 # 纯执行器：所有环境部署均由【Android & 移动全栈开发套件】插件装配完成。

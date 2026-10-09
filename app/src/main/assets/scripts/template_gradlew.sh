@@ -1,6 +1,6 @@
 #!/bin/sh
 # ==============================================================================
-# TianXuan (LinuxAIRuntime) - Self-Adaptive Gradle Wrapper
+# TianXuan - Self-Adaptive Gradle Wrapper
 # ==============================================================================
 DIR="$(cd "$(dirname "$0")" && pwd)"
 

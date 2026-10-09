@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # ==============================================================================
-# TianXuan (LinuxAIRuntime) - 内置 APK 逆向 MCP 服务端 (stdio transport)
+# TianXuan - 内置 APK 逆向 MCP 服务端 (stdio transport)
 # ------------------------------------------------------------------------------
 # 自包含轻量 MCP 服务，包装沙箱内 android-suite 已装配的逆向工具链：
 #   apktool  (解包/回编译)   jadx (dex->java)   aapt (清单解码)

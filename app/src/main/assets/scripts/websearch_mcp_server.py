@@ -1,7 +1,7 @@
 ﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # ==============================================================================
-# TianXuan (LinuxAIRuntime) - 内置 Web 搜索与网页抓取 MCP 服务端 (stdio transport)
+# TianXuan - 内置 Web 搜索与网页抓取 MCP 服务端 (stdio transport)
 # ------------------------------------------------------------------------------
 # 零依赖纯 Python 实现，开箱即用，无需 Node.js / npx 或外部 pip 包。
 # 提供免 API Key 的多引擎网络搜索（Baidu / Bing / DuckDuckGo / Sogou）与网页正文提取。

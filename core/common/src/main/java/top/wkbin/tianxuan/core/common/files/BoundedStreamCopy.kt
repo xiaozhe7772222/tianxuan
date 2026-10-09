@@ -16,7 +16,7 @@ class PayloadTooLargeException(
 ) : IOException(message)
 
 /**
- * 通用有界流式传输与复制安全工具库（借鉴 PalmClaw BoundedStreamCopy 设计）。
+ * 通用有界流式传输与复制安全工具库（基于天玄有界流复制设计）。
  *
  * 核心目标：
  * 1. 规避 Android JVM 堆内存（256MB~512MB）压力，以固定块（默认 16KB）流式传输，绝不在内存中全量缓冲；

@@ -101,7 +101,7 @@ Debug APK output: `app/build/outputs/apk/debug/tianxuan-v0.11.0-debug.apk`
 ## 📐 Architecture Topology
 
 ```text
-LinuxAIRuntime/
+TianXuan/
 ├── app/                  # Host application: MainActivity, Koin DI, JNI C code, Foreground Service
 ├── core/
 │   ├── model/           # Pure Kotlin data models (Strictly decoupled from Android SDK)
