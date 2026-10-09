@@ -1211,22 +1211,27 @@ class ChatViewModel(
         val trimmedModel = model.trim()
         if (trimmedModel.isBlank()) return
         viewModelScope.launch {
-            val id = "${provider.trim().lowercase()}-${trimmedModel.lowercase()}"
-                .replace(Regex("[^a-z0-9-]"), "-")
-            // 派生 id 与既有档案冲突时提示而非静默覆盖
-            if (aiModelDao.findById(id) != null) {
-                _notice.value = context.getString(R.string.chat_model_profile_exists)
-                return@launch
+            try {
+                val id = "${provider.trim().lowercase()}-${trimmedModel.lowercase()}"
+                    .replace(Regex("[^a-z0-9-]"), "-")
+                if (aiModelDao.findById(id) != null) {
+                    _notice.value = context.getString(R.string.chat_model_profile_exists)
+                    return@launch
+                }
+                profileWriter.upsertProfile(
+                    AiProfileWriter.UpsertRequest(
+                        id = id,
+                        name = trimmedName,
+                        provider = provider.trim().ifBlank { trimmedModel },
+                        model = trimmedModel,
+                        baseUrl = baseUrl.trim(),
+                    ),
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _notice.value = "模型保存失败：${e.message ?: e::class.simpleName}"
             }
-            profileWriter.upsertProfile(
-                AiProfileWriter.UpsertRequest(
-                    id = id,
-                    name = trimmedName,
-                    provider = provider.trim().ifBlank { trimmedModel },
-                    model = trimmedModel,
-                    baseUrl = baseUrl.trim(),
-                ),
-            )
         }
     }
 

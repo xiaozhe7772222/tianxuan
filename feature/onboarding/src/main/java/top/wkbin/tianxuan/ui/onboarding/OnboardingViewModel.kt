@@ -307,41 +307,48 @@ class OnboardingViewModel(
         if (model.isBlank()) return
         val imported = _importedProfile.value
         viewModelScope.launch {
-            val keyToSave = if (_apiKey.value.isNotBlank()) {
-                _apiKey.value.trim()
-            } else if (imported != null && imported.apiKeys.isNotEmpty()) {
-                imported.apiKeys.joinToString("\n")
-            } else {
-                imported?.apiKey.orEmpty()
+            try {
+                val keyToSave = if (_apiKey.value.isNotBlank()) {
+                    _apiKey.value.trim()
+                } else if (imported != null && imported.apiKeys.isNotEmpty()) {
+                    imported.apiKeys.joinToString("\n")
+                } else {
+                    imported?.apiKey.orEmpty()
+                }
+                val modelList = if (imported != null && imported.model.isNotBlank()) {
+                    imported.model
+                } else {
+                    model
+                }
+                profileWriter.upsertProfile(
+                    top.wkbin.tianxuan.core.tools.AiProfileWriter.UpsertRequest(
+                        name = _modelName.value.ifBlank { model },
+                        provider = _modelProvider.value,
+                        model = modelList,
+                        baseUrl = _baseUrl.value,
+                        apiKey = keyToSave,
+                        requestsPerMinutePerKey = imported?.requestsPerMinutePerKey ?: 0,
+                        temperature = imported?.temperature,
+                        maxTokens = imported?.maxTokens,
+                        topP = imported?.topP,
+                        reasoningMode = imported?.reasoningMode,
+                        reasoningEffort = imported?.reasoningEffort,
+                        toolCallMode = imported?.toolCallMode,
+                        contextTokens = imported?.contextTokens,
+                        customHeaders = imported?.customHeaders.orEmpty(),
+                        pureChatMode = imported?.pureChatMode ?: false,
+                        visionEnabled = imported?.visionEnabled ?: true,
+                        imageGenerationEnabled = imported?.imageGenerationEnabled ?: false,
+                        responseApiEnabled = imported?.responseApiEnabled ?: false,
+                    ),
+                )
+                finish()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 写入失败时留在引导页并提示，不再静默标记 onboarding 完成
+                _importError.value = "模型配置保存失败：${e.message ?: e::class.simpleName}"
             }
-            val modelList = if (imported != null && imported.model.isNotBlank()) {
-                imported.model
-            } else {
-                model
-            }
-            profileWriter.upsertProfile(
-                top.wkbin.tianxuan.core.tools.AiProfileWriter.UpsertRequest(
-                    name = _modelName.value.ifBlank { model },
-                    provider = _modelProvider.value,
-                    model = modelList,
-                    baseUrl = _baseUrl.value,
-                    apiKey = keyToSave,
-                    requestsPerMinutePerKey = imported?.requestsPerMinutePerKey ?: 0,
-                    temperature = imported?.temperature,
-                    maxTokens = imported?.maxTokens,
-                    topP = imported?.topP,
-                    reasoningMode = imported?.reasoningMode,
-                    reasoningEffort = imported?.reasoningEffort,
-                    toolCallMode = imported?.toolCallMode,
-                    contextTokens = imported?.contextTokens,
-                    customHeaders = imported?.customHeaders.orEmpty(),
-                    pureChatMode = imported?.pureChatMode ?: false,
-                    visionEnabled = imported?.visionEnabled ?: true,
-                    imageGenerationEnabled = imported?.imageGenerationEnabled ?: false,
-                    responseApiEnabled = imported?.responseApiEnabled ?: false,
-                ),
-            )
-            finish()
         }
     }
 
