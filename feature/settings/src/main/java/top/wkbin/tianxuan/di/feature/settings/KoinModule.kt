@@ -5,6 +5,7 @@ import top.wkbin.tianxuan.ui.settings.AppManagementViewModel
 import top.wkbin.tianxuan.ui.settings.CcSwitchViewModel
 import top.wkbin.tianxuan.ui.settings.FtpSettingsViewModel
 import top.wkbin.tianxuan.ui.settings.LocalLlmViewModel
+import top.wkbin.tianxuan.ui.settings.McpMonitorViewModel
 import top.wkbin.tianxuan.ui.settings.SettingsViewModel
 import top.wkbin.tianxuan.ui.settings.SponsorListRepository
 import top.wkbin.tianxuan.ui.settings.SponsorListViewModel
@@ -139,4 +140,6 @@ val featureSettingsModule = module {
     }
 
     viewModel<StatsViewModel> { StatsViewModel(statsRepository = get()) }
+
+    viewModel<McpMonitorViewModel> { McpMonitorViewModel(mcpManager = get()) }
 }

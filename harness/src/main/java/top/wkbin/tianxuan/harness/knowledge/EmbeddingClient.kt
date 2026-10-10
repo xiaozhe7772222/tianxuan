@@ -64,10 +64,13 @@ class EmbeddingClient(
             call.execute().use { response ->
                 if (!response.isSuccessful) {
                     val body = response.body.string()
+                    val maskedBaseUrl = baseUrl.trimEnd('/').substringBefore('/').take(30)
                     if (response.code == 429) {
-                        throw IOException("Embedding rate limited: $body")
+                        throw IOException("嵌入接口限流（429）：请稍后重试或降低添加频率（端点: $maskedBaseUrl）")
                     }
-                    throw IOException("Embedding API ${response.code}: ${body.take(500)}")
+                    throw IOException(
+                        "嵌入接口错误 HTTP ${response.code}（端点: $maskedBaseUrl）：${body.take(500)}"
+                    )
                 }
                 val body = response.body.string()
                 val parsed = runCatching { json.decodeFromString(EmbeddingResponse.serializer(), body) }
@@ -76,6 +79,14 @@ class EmbeddingClient(
             }
         } catch (c: CancellationException) {
             throw c
+        } catch (e: java.net.SocketException) {
+            val maskedBaseUrl = baseUrl.trimEnd('/').substringBefore('/').take(30)
+            throw IOException(
+                "嵌入连接被关闭（Socket closed）：请检查激活模型的 Base URL 是否可访问、网络是否受限、以及 API Key 是否有效（端点: $maskedBaseUrl）",
+                e,
+            )
+        } catch (e: java.net.UnknownHostException) {
+            throw IOException("嵌入连接失败：无法解析主机（请检查 Base URL 拼写与设备网络）", e)
         } finally {
             cancelHandle?.dispose()
         }

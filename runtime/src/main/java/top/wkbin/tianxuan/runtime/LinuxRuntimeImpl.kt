@@ -597,6 +597,19 @@ class LinuxRuntimeImpl(
             putAll(prepared.hostEnvironment)
             putIfAbsent("HOME", pathManager.baseDir.parentFile?.absolutePath ?: "/")
             putIfAbsent("PATH", System.getenv("PATH") ?: "/system/bin:/system/xbin")
+            // 终端历史持久化：让 bash 把命令历史写到 rootfs 内持久文件，
+            // 每条命令立即追加（PROMPT_COMMAND="history -a"），避免 PTY 被 SIGKILL 关闭时丢失。
+            // HISTSIZE/HISTFILESIZE 放大，HISTCONTROL 去重以减少噪音。
+            val histDir = "${'$'}{HOME:-/root}"
+            put("HISTFILE", "$histDir/.bash_history")
+            put("HISTSIZE", "20000")
+            put("HISTFILESIZE", "200000")
+            put("HISTCONTROL", "ignoreboth:erasedups")
+            // 已有 PROMPT_COMMAND 时追加，没有则直接设置
+            val existing = this["PROMPT_COMMAND"] ?: ""
+            if ("history -a" !in existing) {
+                put("PROMPT_COMMAND", if (existing.isBlank()) "history -a" else "$existing; history -a")
+            }
         }
         InteractiveLaunchSpec(
             executable = prepared.command.first(),

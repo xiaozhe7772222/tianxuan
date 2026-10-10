@@ -23,6 +23,7 @@ class KnowledgeManager(
     private val repository: KnowledgeRepository,
     private val embeddingClient: EmbeddingClient,
     private val providerRepository: ProviderRepository,
+    private val aiModelRepository: top.wkbin.tianxuan.core.database.AiModelRepository,
 ) {
 
     val documents get() = repository.observeDocuments()
@@ -160,9 +161,18 @@ class KnowledgeManager(
         }
     }
 
+    /**
+     * 嵌入配置：优先用当前激活模型档案的 baseUrl + key（用户在模型编辑器里填的那套），
+     * 回退到全局 ProviderPreferences。模型档案缺失或字段为空时回退默认值。
+     * 避免"用户配置了模型档案但嵌入走全局默认 OpenAI"导致 Socket closed。
+     */
     private suspend fun providerConfig(): Triple<String, String?, String> {
-        val baseUrl = providerRepository.baseUrl.first().ifBlank { "https://api.openai.com/v1" }
-        val apiKey = providerRepository.readApiKey()
+        val active = aiModelRepository.activeModel()
+        val baseUrl = active?.baseUrl?.takeIf { it.isNotBlank() }
+            ?: providerRepository.baseUrl.first().ifBlank { "https://api.openai.com/v1" }
+        val apiKey = active?.secretRef?.takeIf { it.isNotBlank() }?.let {
+            providerRepository.readModelApiKeys(it).firstOrNull()
+        } ?: providerRepository.readApiKey()
         val model = EmbeddingClient.DEFAULT_MODEL
         return Triple(baseUrl, apiKey, model)
     }

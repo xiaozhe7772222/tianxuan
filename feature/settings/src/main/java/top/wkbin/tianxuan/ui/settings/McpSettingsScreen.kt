@@ -90,6 +90,7 @@ import top.wkbin.tianxuan.ui.components.RuntimeTopBar
 @Composable
 fun McpSettingsScreen(
     onBack: () -> Unit,
+    onOpenMonitor: () -> Unit = {},
     viewModel: SettingsViewModel = koinViewModel(),
 ) {
     val servers by viewModel.mcpServers.collectAsStateWithLifecycle()
@@ -116,6 +117,11 @@ fun McpSettingsScreen(
                 title = "MCP 插件与协议生态",
                 statusText = "已就绪",
                 onBack = onBack,
+                actions = {
+                    androidx.compose.material3.TextButton(onClick = onOpenMonitor) {
+                        Text("服务监控")
+                    }
+                },
             )
         },
     ) { padding ->

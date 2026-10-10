@@ -60,6 +60,31 @@ class McpManager(
     private val _connectionStates = MutableStateFlow<Map<String, McpConnectionState>>(emptyMap())
     val connectionStates: StateFlow<Map<String, McpConnectionState>> = _connectionStates.asStateFlow()
 
+    /** MCP 服务监控快照：每个 server 的连接状态、工具数、最近错误。 */
+    data class McpMonitorInfo(
+        val serverId: String,
+        val serverName: String,
+        val state: McpConnectionState,
+        val toolCount: Int,
+        val lastError: String?,
+        val enabled: Boolean,
+        val cooldownRemainingMs: Long?,
+    )
+
+    suspend fun monitorSnapshot(): List<McpMonitorInfo> = withContext(Dispatchers.IO) {
+        repository.servers.first().map { server ->
+            McpMonitorInfo(
+                serverId = server.id,
+                serverName = server.name,
+                state = _connectionStates.value[server.id] ?: McpConnectionState.UNKNOWN,
+                toolCount = cache[server.id]?.tools?.size ?: 0,
+                lastError = getLastError(server.id),
+                enabled = server.isEnabled,
+                cooldownRemainingMs = remainingDiscoveryCooldownMs(server.id),
+            )
+        }
+    }
+
     /**
      * 最近错误。冷却期内额外带上剩余时间：状态只显示 OFFLINE 时，用户无法区分
      * "退避中、稍后自动重试"与"真的连不上"，只会反复手动刷新。

@@ -83,6 +83,7 @@ sealed interface AppDestination : NavKey
 @Serializable data object AgentSubagentSettingsDestination : AppDestination
 @Serializable data object AgentSkillSettingsDestination : AppDestination
 @Serializable data object McpSettingsDestination : AppDestination
+@Serializable data object McpMonitorDestination : AppDestination
 @Serializable data object ToolCenterDestination : AppDestination
 @Serializable data object CcSwitchDestination : AppDestination
 @Serializable data class ToolDetailDestination(val toolId: String) : AppDestination
@@ -579,8 +580,14 @@ fun TianXuanNavHost(
                 GuardedEntry(McpSettingsDestination) {
                     top.wkbin.tianxuan.ui.settings.McpSettingsScreen(
                         onBack = ::popBack,
+                        onOpenMonitor = { settingsStack.push(McpSettingsDestination, McpMonitorDestination) },
                         viewModel = settingsViewModel,
                     )
+                }
+            }
+            entry<McpMonitorDestination> {
+                GuardedEntry(McpMonitorDestination) {
+                    top.wkbin.tianxuan.ui.settings.McpMonitorScreen(onBack = ::popBack)
                 }
             }
             entry<ToolCenterDestination> {
