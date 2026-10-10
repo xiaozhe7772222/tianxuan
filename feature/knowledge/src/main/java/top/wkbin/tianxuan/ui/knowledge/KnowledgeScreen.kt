@@ -66,6 +66,8 @@ fun KnowledgeScreen(
     val error by viewModel.error.collectAsState()
     val adding by viewModel.adding.collectAsState()
     val reEmbedding by viewModel.reEmbedding.collectAsState()
+    val embeddingModel by viewModel.embeddingModel.collectAsState()
+    val embeddingEndpointSuffix by viewModel.embeddingEndpointSuffix.collectAsState()
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf<KbDocumentEntity?>(null) }
@@ -99,6 +101,14 @@ fun KnowledgeScreen(
                 onQueryChange = viewModel::search,
                 results = searchResults,
                 searching = searching,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+
+            EmbeddingSettingsCard(
+                embeddingModel = embeddingModel,
+                embeddingEndpointSuffix = embeddingEndpointSuffix,
+                onModelChange = viewModel::setEmbeddingModel,
+                onSuffixChange = viewModel::setEmbeddingEndpointSuffix,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
 
@@ -338,58 +348,7 @@ private fun AddDocumentDialog(
     onDismiss: () -> Unit,
     onAdd: (name: String, content: String) -> Unit,
     isLoading: Boolean,
-) {
-    var name by remember { mutableStateOf("") }
-    var content by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("添加知识库文档") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("文档名称") },
-                    placeholder = { Text("用于 @kb:名称 引用") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = content,
-                    onValueChange = { content = it },
-                    label = { Text("文档内容") },
-                    placeholder = { Text("支持多段文本，系统会自动分块并嵌入") },
-                    minLines = 5,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "嵌入模型: text-embedding-3-small（可在 API 设置中自定义）",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onAdd(name, content) },
-                enabled = !isLoading && name.isNotBlank() && content.isNotBlank(),
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp))
-                } else {
-                    Text("添加并嵌入")
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
-        },
-    )
-}
+) = AddDocumentDialogImpl(onDismiss, onAdd, isLoading)
 
 private fun formatTime(timestamp: Long): String {
     val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())

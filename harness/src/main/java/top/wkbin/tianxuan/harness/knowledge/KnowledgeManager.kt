@@ -24,6 +24,7 @@ class KnowledgeManager(
     private val embeddingClient: EmbeddingClient,
     private val providerRepository: ProviderRepository,
     private val aiModelRepository: top.wkbin.tianxuan.core.database.AiModelRepository,
+    private val settingsDataStore: top.wkbin.tianxuan.core.datastore.SettingsDataStore,
 ) {
 
     val documents get() = repository.observeDocuments()
@@ -61,8 +62,8 @@ class KnowledgeManager(
         repository.upsertChunks(chunkEntities)
 
         try {
-            val (baseUrl, apiKey, model) = providerConfig()
-            val embeddings = embeddingClient.embed(chunks, baseUrl, apiKey, model)
+            val cfg = providerConfig()
+            val embeddings = embeddingClient.embed(chunks, cfg.baseUrl, cfg.apiKey, cfg.model, cfg.endpointSuffix)
             val withEmbedding = chunkEntities.mapIndexed { index, entity ->
                 val vector = embeddings.getOrNull(index)
                 if (vector != null) entity.copy(embedding = vector.toEmbeddingBytes()) else entity
@@ -96,8 +97,8 @@ class KnowledgeManager(
         val chunks = repository.chunksOf(docId)
         if (chunks.isEmpty()) return
         try {
-            val (baseUrl, apiKey, model) = providerConfig()
-            val embeddings = embeddingClient.embed(chunks.map { it.text }, baseUrl, apiKey, model)
+            val cfg = providerConfig()
+            val embeddings = embeddingClient.embed(chunks.map { it.text }, cfg.baseUrl, cfg.apiKey, cfg.model, cfg.endpointSuffix)
             val updated = chunks.mapIndexed { index, entity ->
                 val vector = embeddings.getOrNull(index)
                 if (vector != null) entity.copy(embedding = vector.toEmbeddingBytes()) else entity
@@ -116,34 +117,56 @@ class KnowledgeManager(
         }
     }
 
-    /** 检索 top-k 相关 chunk（含文档名）。 */
+    /** 检索 top-k 相关 chunk（含文档名）。向量嵌入失败时回退 BM25 关键词检索。 */
     suspend fun search(query: String, topK: Int = 5): List<KnowledgeHit> {
         val allChunks = repository.allEmbeddedChunks()
-        if (allChunks.isEmpty()) return emptyList()
-        val (baseUrl, apiKey, model) = providerConfig()
-        val queryVector = try {
-            embeddingClient.embed(listOf(query), baseUrl, apiKey, model).firstOrNull()
-        } catch (e: Exception) {
-            return emptyList()
-        } ?: return emptyList()
+        // 向量库为空时回退到全部 chunk 的关键词检索（而非空返）
+        val chunksToSearch = if (allChunks.isNotEmpty()) allChunks else repository.allDocuments().flatMap { repository.chunksOf(it.id) }
+        if (chunksToSearch.isEmpty()) return emptyList()
 
-        // 预载文档名缓存：避免在序列 lambda 内调用挂起函数
         val docNameById = repository.allDocuments().associate { it.id to it.name }
+        val cfg = providerConfig()
+        val queryVector = try {
+            embeddingClient.embed(listOf(query), cfg.baseUrl, cfg.apiKey, cfg.model, cfg.endpointSuffix).firstOrNull()
+        } catch (e: Exception) {
+            null // 嵌入失败 → BM25 降级（不阻断检索）
+        }
+
         return withContext(Dispatchers.Default) {
-            allChunks.asSequence()
-                .mapNotNull { chunk ->
-                    val vector = chunk.embedding ?: return@mapNotNull null
-                    val score = cosineSimilarity(queryVector, vector.toEmbedding())
+            if (queryVector != null) {
+                // 向量余弦相似度
+                allChunks.asSequence()
+                    .mapNotNull { chunk ->
+                        val vector = chunk.embedding ?: return@mapNotNull null
+                        val score = cosineSimilarity(queryVector, vector.toEmbedding())
+                        KnowledgeHit(
+                            docId = chunk.docId,
+                            docName = docNameById[chunk.docId] ?: "未知",
+                            text = chunk.text,
+                            score = score,
+                        )
+                    }
+                    .sortedByDescending { it.score }
+                    .take(topK)
+                    .toList()
+            } else {
+                // BM25 降级：按查询词在 chunk 文本中的出现频次/占比打分
+                val queryTokens = query.lowercase().split(Regex("[\\s,，。、;；:：!?！？]+")).filter { it.isNotBlank() }
+                if (queryTokens.isEmpty()) return@withContext emptyList()
+                chunksToSearch.map { chunk ->
+                    val lowerText = chunk.text.lowercase()
+                    val hits = queryTokens.count { token -> lowerText.contains(token) }
+                    val ratio = if (chunk.text.isNotEmpty()) hits.toDouble() / queryTokens.size.coerceAtLeast(1) else 0.0
                     KnowledgeHit(
                         docId = chunk.docId,
                         docName = docNameById[chunk.docId] ?: "未知",
                         text = chunk.text,
-                        score = score,
+                        score = (ratio * 0.5).toFloat() + (hits.coerceAtLeast(0) * 0.1f),
                     )
-                }
-                .sortedByDescending { it.score }
-                .take(topK)
-                .toList()
+                }.filter { it.score > 0f }
+                    .sortedByDescending { it.score }
+                    .take(topK)
+            }
         }
     }
 
@@ -166,16 +189,31 @@ class KnowledgeManager(
      * 回退到全局 ProviderPreferences。模型档案缺失或字段为空时回退默认值。
      * 避免"用户配置了模型档案但嵌入走全局默认 OpenAI"导致 Socket closed。
      */
-    private suspend fun providerConfig(): Triple<String, String?, String> {
+    /**
+     * 嵌入配置：优先用当前激活模型档案的 baseUrl + key（用户在模型编辑器里填的那套），
+     * 嵌入模型名与端点后缀取知识库页自定义设置（覆盖 OpenAI 默认 text-embedding-3-small）。
+     * 避免"用户配置了模型档案但嵌入走全局默认 OpenAI"导致 Socket closed 或 404。
+     */
+    private suspend fun providerConfig(): EmbeddingConfig {
         val active = aiModelRepository.activeModel()
         val baseUrl = active?.baseUrl?.takeIf { it.isNotBlank() }
             ?: providerRepository.baseUrl.first().ifBlank { "https://api.openai.com/v1" }
         val apiKey = active?.secretRef?.takeIf { it.isNotBlank() }?.let {
             providerRepository.readModelApiKeys(it).firstOrNull()
         } ?: providerRepository.readApiKey()
-        val model = EmbeddingClient.DEFAULT_MODEL
-        return Triple(baseUrl, apiKey, model)
+        val model = settingsDataStore.embeddingModel.first()
+            .takeIf { it.isNotBlank() } ?: EmbeddingClient.DEFAULT_MODEL
+        val endpointSuffix = settingsDataStore.embeddingEndpointSuffix.first()
+            .takeIf { it.isNotBlank() } ?: EmbeddingClient.DEFAULT_ENDPOINT_SUFFIX
+        return EmbeddingConfig(baseUrl, apiKey, model, endpointSuffix)
     }
+
+    private data class EmbeddingConfig(
+        val baseUrl: String,
+        val apiKey: String?,
+        val model: String,
+        val endpointSuffix: String,
+    )
 
     companion object {
         fun cosineSimilarity(a: FloatArray, b: FloatArray): Float {

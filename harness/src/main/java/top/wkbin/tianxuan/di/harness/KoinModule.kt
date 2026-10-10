@@ -502,6 +502,7 @@ val harnessModule = module {
             embeddingClient = get(),
             providerRepository = get(),
             aiModelRepository = get(),
+            settingsDataStore = get(),
         )
     }
 

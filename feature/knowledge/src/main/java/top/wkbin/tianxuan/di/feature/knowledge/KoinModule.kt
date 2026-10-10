@@ -6,6 +6,9 @@ import top.wkbin.tianxuan.ui.knowledge.KnowledgeViewModel
 
 val featureKnowledgeModule = module {
     viewModel<KnowledgeViewModel> {
-        KnowledgeViewModel(knowledgeManager = get())
+        KnowledgeViewModel(
+            knowledgeManager = get(),
+            settingsDataStore = get(),
+        )
     }
 }

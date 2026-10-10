@@ -10,7 +10,7 @@
     "fileCount": 112,
     "files": {
         "core/database/src/main/java/top/wkbin/tianxuan/core/database/PersistenceRepositories.kt": 463,
-        "core/datastore/src/main/java/top/wkbin/tianxuan/core/datastore/SettingsDataStore.kt": 1003,
+        "core/datastore/src/main/java/top/wkbin/tianxuan/core/datastore/SettingsDataStore.kt": 1025,
         "core/model/src/main/java/top/wkbin/tianxuan/core/model/workflow/BuiltinWorkflows.kt": 551,
         "core/model/src/main/java/top/wkbin/tianxuan/core/model/workflow/HostWorkflowActions.kt": 408,
         "feature/browser/src/main/java/top/wkbin/tianxuan/ui/browser/BrowserScreen.kt": 514,
@@ -80,7 +80,7 @@
         "feature/workspace/src/main/java/top/wkbin/tianxuan/ui/workspace/WorkspaceImportDialog.kt": 421,
         "feature/workspace/src/main/java/top/wkbin/tianxuan/ui/workspace/WorkspaceScreen.kt": 487,
         "feature/workspace/src/main/java/top/wkbin/tianxuan/ui/workspace/WorkspaceViewModel.kt": 719,
-        "harness/src/main/java/top/wkbin/tianxuan/di/harness/KoinModule.kt": 627,
+        "harness/src/main/java/top/wkbin/tianxuan/di/harness/KoinModule.kt": 628,
         "harness/src/main/java/top/wkbin/tianxuan/harness/AnthropicApi.kt": 645,
         "harness/src/main/java/top/wkbin/tianxuan/harness/ApprovalPolicyEngine.kt": 502,
         "harness/src/main/java/top/wkbin/tianxuan/harness/ContextWindowPolicy.kt": 1075,

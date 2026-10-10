@@ -999,5 +999,27 @@ class SettingsDataStore(
         const val DEFAULT_ROUND_LIMIT_AUTO_CONTINUATIONS = 2
         const val MAX_ROUND_LIMIT_AUTO_CONTINUATIONS = 10
         const val MAX_DISMISSED_SKILL_SUGGESTIONS = 1000
+
+        // RAG 嵌入默认配置：与 OpenAI 兼容 /embeddings 端点对齐。
+        // 用户可在知识库页自定义模型名与端点后缀（适配不支持 text-embedding-3-small 的中转/部署）。
+        const val DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
+        const val DEFAULT_EMBEDDING_ENDPOINT_SUFFIX = "/embeddings"
+    }
+
+    // RAG 嵌入可配置（模型名 + 端点后缀）
+    private val embeddingModelKey = stringPreferencesKey("rag_embedding_model")
+    val embeddingModel: Flow<String> = context.settingsDataStore.data.map {
+        it[embeddingModelKey]?.takeIf { v -> v.isNotBlank() } ?: DEFAULT_EMBEDDING_MODEL
+    }
+    suspend fun setEmbeddingModel(value: String) {
+        context.settingsDataStore.edit { it[embeddingModelKey] = value.trim() }
+    }
+
+    private val embeddingEndpointSuffixKey = stringPreferencesKey("rag_embedding_endpoint_suffix")
+    val embeddingEndpointSuffix: Flow<String> = context.settingsDataStore.data.map {
+        it[embeddingEndpointSuffixKey]?.takeIf { v -> v.isNotBlank() } ?: DEFAULT_EMBEDDING_ENDPOINT_SUFFIX
+    }
+    suspend fun setEmbeddingEndpointSuffix(value: String) {
+        context.settingsDataStore.edit { it[embeddingEndpointSuffixKey] = value.trim() }
     }
 }

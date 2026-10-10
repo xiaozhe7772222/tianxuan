@@ -13,7 +13,24 @@ import top.wkbin.tianxuan.harness.knowledge.KnowledgeManager
 
 class KnowledgeViewModel(
     private val knowledgeManager: KnowledgeManager,
+    private val settingsDataStore: top.wkbin.tianxuan.core.datastore.SettingsDataStore,
 ) : ViewModel() {
+
+    val embeddingModel: kotlinx.coroutines.flow.StateFlow<String> =
+        settingsDataStore.embeddingModel
+            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000), top.wkbin.tianxuan.core.datastore.SettingsDataStore.DEFAULT_EMBEDDING_MODEL)
+
+    val embeddingEndpointSuffix: kotlinx.coroutines.flow.StateFlow<String> =
+        settingsDataStore.embeddingEndpointSuffix
+            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000), top.wkbin.tianxuan.core.datastore.SettingsDataStore.DEFAULT_EMBEDDING_ENDPOINT_SUFFIX)
+
+    fun setEmbeddingModel(value: String) {
+        viewModelScope.launch { settingsDataStore.setEmbeddingModel(value) }
+    }
+
+    fun setEmbeddingEndpointSuffix(value: String) {
+        viewModelScope.launch { settingsDataStore.setEmbeddingEndpointSuffix(value) }
+    }
 
     val documents: StateFlow<List<KbDocumentEntity>> =
         knowledgeManager.documents
