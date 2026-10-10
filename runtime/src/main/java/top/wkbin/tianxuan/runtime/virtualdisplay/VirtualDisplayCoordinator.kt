@@ -8,6 +8,8 @@ import com.ai.assistance.showerclient.ShowerEnvironment
 import com.ai.assistance.showerclient.ShowerServerManager
 import com.ai.assistance.showerclient.ShowerVideoRenderer
 import top.wkbin.tianxuan.core.common.logging.AppLogger
+import top.wkbin.tianxuan.core.model.ExecutionMode
+import top.wkbin.tianxuan.runtime.privilege.PrivilegeAvailability
 import top.wkbin.tianxuan.runtime.privilege.PrivilegeManager
 import java.util.concurrent.ConcurrentHashMap
 
@@ -27,7 +29,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class VirtualDisplayCoordinator(
     private val context: Context,
-    privilegeManager: PrivilegeManager,
+    private val privilegeManager: PrivilegeManager,
     private val logger: AppLogger,
 ) {
 
@@ -78,10 +80,35 @@ class VirtualDisplayCoordinator(
         bitrateKbps: Int? = null,
     ): Int? {
         val controller = controller(sessionId)
+
+        // 1. 先检查宿主特权通道状态：若 effectiveMode 不是 SHIZUKU/ROOT（启动时被降级到
+        //    PRoot，或 Shizuku 授权后未重启刷新），所有 shell 命令都会失败，resolveWorkDir
+        //    会误报"候选目录均不可写"。先给出真实原因，避免误导用户查目录权限。
+        val priv = privilegeManager.state.value
+        if (priv.availability != PrivilegeAvailability.ACTIVE ||
+            priv.effectiveMode == ExecutionMode.PROOT
+        ) {
+            lastFailureReason = buildString {
+                append("宿主特权通道未生效：当前 effectiveMode=${priv.effectiveMode}，")
+                append("availability=${priv.availability}。原因：${priv.reason}。")
+                append("请在天玄设置 → 系统保活与开发者诊断 → 宿主特权模式中切换到 Shizuku，")
+                append("或重启天玄 App 让特权状态在冷启动时重新校验。")
+                if (!priv.shizukuAvailable) {
+                    append("（Shizuku 服务当前不可用：请打开 Shizuku App 并确保服务已启动、权限已授予）")
+                }
+            }
+            logger.w("虚拟屏 ensureVirtualDisplay 被拦：特权通道未生效（$priv）")
+            return null
+        }
+
         if (!ShowerServerManager.ensureServerStarted(context)) {
-            lastFailureReason = "shower-server 启动失败：候选工作目录均不可写（已尝试 ${ShowerEnvironment.workDirCandidates}）。" +
-                "请确认 Shizuku 服务已启动并授权，或查看 logcat（tag: ShowerServerManager）获取精确日志。"
-            logger.w("虚拟屏 server 启动失败：请检查 Shizuku/Root 特权状态（PRoot 模式不支持虚拟屏）")
+            lastFailureReason = buildString {
+                append("shower-server 启动失败：特权通道已生效（${priv.effectiveMode}）但工作目录探测均失败。")
+                append("已尝试：${ShowerEnvironment.workDirCandidates}。")
+                append("这通常是 ROM 的 SELinux 或 init.rc 配置导致 shell uid 对这些目录无写权。")
+                append("可查看 logcat（tag: ShowerServerManager）获取 resolveWorkDir 的逐目录 stderr 详情。")
+            }
+            logger.w("虚拟屏 server 启动失败：工作目录均不可写（特权通道 ${priv.effectiveMode} 已生效）")
             return null
         }
         val metrics = context.resources.displayMetrics
