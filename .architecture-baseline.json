@@ -89,7 +89,7 @@
         "harness/src/main/java/top/wkbin/tianxuan/harness/ProviderClient.kt": 1814,
         "harness/src/main/java/top/wkbin/tianxuan/harness/ResponsesApi.kt": 495,
         "harness/src/main/java/top/wkbin/tianxuan/harness/SubagentOrchestrator.kt": 843,
-        "harness/src/main/java/top/wkbin/tianxuan/harness/ToolExecutor.kt": 1678,
+        "harness/src/main/java/top/wkbin/tianxuan/harness/ToolExecutor.kt": 1680,
         "harness/src/main/java/top/wkbin/tianxuan/harness/compaction/CompactionSummarizer.kt": 406,
         "harness/src/main/java/top/wkbin/tianxuan/harness/dual/DualAgentCoordinator.kt": 450,
         "harness/src/main/java/top/wkbin/tianxuan/harness/mcp/McpHttpTransport.kt": 702,
@@ -121,6 +121,7 @@
         "tools/src/main/java/top/wkbin/tianxuan/core/tools/ToolRegistry.kt": 504,
         "tools/src/main/java/top/wkbin/tianxuan/core/tools/skill/ClawHubClient.kt": 415,
         "tools/src/main/java/top/wkbin/tianxuan/core/tools/skill/SkillPackageInspector.kt": 418,
-        "harness/src/main/java/top/wkbin/tianxuan/harness/HarnessMessage.kt": 174
+        "harness/src/main/java/top/wkbin/tianxuan/harness/HarnessMessage.kt": 174,
+        "runtime/src/main/java/top/wkbin/tianxuan/runtime/virtualdisplay/VirtualDisplayCoordinator.kt": 163
     }
 }

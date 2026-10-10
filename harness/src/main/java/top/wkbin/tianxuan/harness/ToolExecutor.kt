@@ -664,7 +664,9 @@ class ToolExecutor(
                 val session = optionalSession(args)
                 val displayId = coordinator.ensureVirtualDisplay(session)
                 if (displayId == null) {
-                    false to "虚拟屏创建失败（session=$session）：需要 Shizuku 或 Root 模式，请先在设置中授权"
+                    val reason = coordinator.lastFailureReason
+                        ?: "未知原因（ensureVirtualDisplay 返回 null 但无 failureReason）"
+                    false to "虚拟屏创建失败（session=$session）：$reason"
                 } else {
                     true to "虚拟屏已就绪：session=$session displayId=$displayId（尺寸与主屏一致）；" +
                         "接下来用 virtual_screen_launch 启动应用，virtual_screen_screenshot 截图识图"

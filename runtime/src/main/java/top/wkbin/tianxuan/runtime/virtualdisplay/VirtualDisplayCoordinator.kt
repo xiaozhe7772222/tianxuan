@@ -33,8 +33,19 @@ class VirtualDisplayCoordinator(
 
     private val sessions = ConcurrentHashMap<String, ShowerController>()
 
+    /** 最近一次虚拟屏操作失败的精确原因（供工具调用回显，替代笼统的"权限不足"）。 */
+    @Volatile
+    var lastFailureReason: String? = null
+
     init {
         ShowerEnvironment.shellRunner = TianxuanShowerShellRunner(privilegeManager, logger)
+        // 追加更可靠的 workDir 候选：第三方库默认只有 /data/local/tmp 与
+        // /data/data/com.android.shell/files，部分 ROM（小米 Android 16 实测）两者都不可写，
+        // 导致 shower-server 无法部署。/dev/shm 是 tmpfs，shell uid 天然可写，可靠兜底。
+        ShowerEnvironment.workDirCandidates = ShowerEnvironment.workDirCandidates + listOf(
+            "/dev/shm",
+            "/sdcard/Android/data/com.android.shell/files",
+        )
     }
 
     /** shower-server Binder 是否已就绪（收到 SHOWER_BINDER_READY 广播且未死亡） */
@@ -68,6 +79,8 @@ class VirtualDisplayCoordinator(
     ): Int? {
         val controller = controller(sessionId)
         if (!ShowerServerManager.ensureServerStarted(context)) {
+            lastFailureReason = "shower-server 启动失败：候选工作目录均不可写（已尝试 ${ShowerEnvironment.workDirCandidates}）。" +
+                "请确认 Shizuku 服务已启动并授权，或查看 logcat（tag: ShowerServerManager）获取精确日志。"
             logger.w("虚拟屏 server 启动失败：请检查 Shizuku/Root 特权状态（PRoot 模式不支持虚拟屏）")
             return null
         }
@@ -80,9 +93,11 @@ class VirtualDisplayCoordinator(
             bitrateKbps = bitrateKbps,
         )
         if (!ok) {
+            lastFailureReason = "虚拟屏创建失败（shower-server 已启动但 ensureDisplay 失败，session=$sessionId）。可能是屏幕镜像参数不匹配或 Binder 通信中断，请查看 logcat。"
             logger.w("虚拟屏创建失败（session=$sessionId，server 已启动）")
             return null
         }
+        lastFailureReason = null
         return controller.getDisplayId()
     }
 

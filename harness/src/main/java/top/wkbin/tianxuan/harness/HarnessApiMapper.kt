@@ -56,6 +56,9 @@ internal object HarnessApiMapper {
             lower == "compress" -> HarnessTool.COMPRESS
             lower == "ask_user" -> HarnessTool.ASK_USER
             lower == "render_surface" -> HarnessTool.RENDER_SURFACE
+            lower == "kb_search" -> HarnessTool.KNOWLEDGE
+            lower == "kb_add" -> HarnessTool.KB_ADD
+            lower == "kb_list" -> HarnessTool.KB_LIST
             lower == "use_capability" -> HarnessTool.MCP
             trimmed.startsWith("mcp__") -> HarnessTool.MCP
             else -> HarnessTool.BASE
