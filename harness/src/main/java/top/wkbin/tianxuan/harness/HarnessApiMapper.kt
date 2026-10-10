@@ -83,5 +83,8 @@ internal object HarnessApiMapper {
         HarnessTool.COMPRESS -> "compress"
         HarnessTool.ASK_USER -> "ask_user"
         HarnessTool.RENDER_SURFACE -> "render_surface"
+        HarnessTool.KNOWLEDGE -> "kb_search"
+        HarnessTool.KB_ADD -> "kb_add"
+        HarnessTool.KB_LIST -> "kb_list"
     }
 }

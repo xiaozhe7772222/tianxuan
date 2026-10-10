@@ -53,5 +53,8 @@ object ToolStatusDescriber {
         HarnessTool.COMPRESS -> "正在压缩会话历史…"
         HarnessTool.ASK_USER -> "正在向你提问…"
         HarnessTool.RENDER_SURFACE -> "正在生成 A2UI 原生界面：${arg(args, "title") ?: arg(args, "surfaceId") ?: "surface"}"
+        HarnessTool.KNOWLEDGE -> "正在检索知识库：${arg(args, "query")?.take(MAX_STATUS_ARG_LENGTH) ?: "查询"}"
+        HarnessTool.KB_ADD -> "正在写入知识库文档：${arg(args, "name")?.take(MAX_STATUS_ARG_LENGTH) ?: "新文档"}"
+        HarnessTool.KB_LIST -> "正在列出知识库文档"
     }
 }

@@ -249,6 +249,7 @@ val harnessModule = module {
             providerClient = get(),
             skillRepository = get(),
             settingsDataStore = get(),
+            knowledgeManager = getOrNull(),
         )
     }
 

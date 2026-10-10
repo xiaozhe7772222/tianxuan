@@ -88,6 +88,7 @@ class ToolExecutor(
     private val providerClient: ProviderClient? = null,
     private val skillRepository: top.wkbin.tianxuan.core.database.AgentSkillRepository? = null,
     private val settingsDataStore: AgentPreferences? = null,
+    private val knowledgeManager: top.wkbin.tianxuan.harness.knowledge.KnowledgeManager? = null,
 ) {
     suspend fun execute(
         toolCall: ToolCall,
@@ -388,6 +389,9 @@ class ToolExecutor(
             // ask_user 在 execute() 入口特判（不走审批门控）；此处仅为 when 穷尽兜底
             HarnessTool.ASK_USER -> false to "ask_user 应在执行入口处理，不应到达工具分派"
             HarnessTool.RENDER_SURFACE -> A2uiSurfaceBus.publishFromTool(args, sessionId)
+            HarnessTool.KNOWLEDGE -> executeKnowledgeSearch(args)
+            HarnessTool.KB_ADD -> executeKnowledgeAdd(args)
+            HarnessTool.KB_LIST -> executeKnowledgeList()
             HarnessTool.BUILD_SCRIPT -> buildScriptToolExecutor?.execute(args, workspace) ?: (false to "未初始化构建脚本管理器")
             HarnessTool.SUBAGENT -> if (rawToolName.equals("invoke_dual_agent", ignoreCase = true)) {
                 dualAgentCoordinator?.executeFromTool(args, sessionId, workspace) ?: (false to "未初始化双智能体编排器")
@@ -1555,6 +1559,56 @@ class ToolExecutor(
     /** virtual_screen_* 的可选会话 ID（默认 default，不同会话对应独立虚拟屏）。 */
     private fun optionalSession(args: JsonObject): String =
         args["session"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: VIRTUAL_SCREEN_DEFAULT_SESSION
+
+    private suspend fun executeKnowledgeSearch(args: JsonObject): Pair<Boolean, String> {
+        val km = knowledgeManager ?: return false to "知识库未初始化"
+        val query = args["query"]?.jsonPrimitive?.contentOrNull?.trim() ?: ""
+        if (query.isBlank()) return false to "kb_search 需要 query 参数"
+        val topK = (args["top_k"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 3).coerceIn(1, 10)
+        return try {
+            val hits = km.search(query, topK)
+            if (hits.isEmpty()) {
+                true to "知识库中未检索到与「$query」相关的文档片段。可通过 kb_add 先添加文档。"
+            } else {
+                val text = hits.joinToString("\n\n") { "【${it.docName} · 相似度 ${"%.2f".format(it.score)}】\n${it.text}" }
+                true to text
+            }
+        } catch (e: Exception) {
+            false to "知识库检索失败：${e.message ?: e::class.simpleName}"
+        }
+    }
+
+    private suspend fun executeKnowledgeAdd(args: JsonObject): Pair<Boolean, String> {
+        val km = knowledgeManager ?: return false to "知识库未初始化"
+        val name = args["name"]?.jsonPrimitive?.contentOrNull?.trim() ?: ""
+        val content = args["content"]?.jsonPrimitive?.contentOrNull ?: ""
+        if (name.isBlank()) return false to "kb_add 需要 name 参数"
+        if (content.isBlank()) return false to "kb_add 需要 content 参数"
+        return try {
+            val docId = km.addDocument(name, content, source = "agent")
+            val doc = km.documents.first().firstOrNull { it.id == docId }
+            true to "知识库文档「$name」已写入（ID: $docId，分块 ${doc?.chunkCount ?: 0}，状态 ${doc?.status ?: "embedding"}）。"
+        } catch (e: Exception) {
+            false to "知识库写入失败：${e.message ?: e::class.simpleName}"
+        }
+    }
+
+    private suspend fun executeKnowledgeList(): Pair<Boolean, String> {
+        val km = knowledgeManager ?: return false to "知识库未初始化"
+        return try {
+            val docs = km.documents.first()
+            if (docs.isEmpty()) {
+                true to "知识库为空。可通过 kb_add 添加文档。"
+            } else {
+                val text = docs.joinToString("\n") { doc ->
+                    "- ${doc.name}（来源 ${doc.source} · 分块 ${doc.chunkCount} · 状态 ${doc.status}）"
+                }
+                true to "知识库共 ${docs.size} 个文档：\n$text"
+            }
+        } catch (e: Exception) {
+            false to "知识库读取失败：${e.message ?: e::class.simpleName}"
+        }
+    }
 
     companion object {
         const val MIN_BASE_TIMEOUT_SECONDS = 1L

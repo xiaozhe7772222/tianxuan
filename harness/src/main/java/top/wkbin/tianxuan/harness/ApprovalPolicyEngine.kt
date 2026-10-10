@@ -91,7 +91,7 @@ class ApprovalPolicyEngine(
             return ApprovalDecision(false)
         }
         if (tool == HarnessTool.READ || tool == HarnessTool.MEMORY || tool == HarnessTool.PLAN ||
-            tool == HarnessTool.SCRATCHPAD || tool == HarnessTool.HISTORY_SEARCH || tool == HarnessTool.HISTORY_READ || tool == HarnessTool.LOAD_RULE || tool == HarnessTool.LOAD_SKILL || tool == HarnessTool.COMPRESS || tool == HarnessTool.ASK_USER || tool == HarnessTool.RENDER_SURFACE
+            tool == HarnessTool.SCRATCHPAD || tool == HarnessTool.HISTORY_SEARCH || tool == HarnessTool.HISTORY_READ || tool == HarnessTool.LOAD_RULE || tool == HarnessTool.LOAD_SKILL || tool == HarnessTool.COMPRESS || tool == HarnessTool.ASK_USER || tool == HarnessTool.RENDER_SURFACE || tool == HarnessTool.KNOWLEDGE || tool == HarnessTool.KB_ADD || tool == HarnessTool.KB_LIST
         ) {
             return ApprovalDecision(false)
         }
@@ -142,7 +142,8 @@ class ApprovalPolicyEngine(
             // 编译器会报 "must be exhaustive"；写了 else 则被静默判为免审，成为免审后门。
             HarnessTool.READ, HarnessTool.MEMORY, HarnessTool.PLAN, HarnessTool.SCRATCHPAD,
             HarnessTool.HISTORY_SEARCH, HarnessTool.HISTORY_READ, HarnessTool.SUBAGENT, HarnessTool.LOAD_RULE,
-            HarnessTool.LOAD_SKILL, HarnessTool.RENDER_SURFACE, HarnessTool.COMPRESS, HarnessTool.ASK_USER ->
+            HarnessTool.LOAD_SKILL, HarnessTool.RENDER_SURFACE, HarnessTool.COMPRESS, HarnessTool.ASK_USER,
+            HarnessTool.KNOWLEDGE, HarnessTool.KB_ADD, HarnessTool.KB_LIST ->
                 ApprovalDecision(false)
         }
     }
@@ -164,7 +165,8 @@ class ApprovalPolicyEngine(
         // 只读检索与元操作：全放
         HarnessTool.READ, HarnessTool.MEMORY, HarnessTool.PLAN, HarnessTool.SCRATCHPAD,
         HarnessTool.HISTORY_SEARCH, HarnessTool.HISTORY_READ, HarnessTool.LOAD_RULE,
-        HarnessTool.LOAD_SKILL, HarnessTool.COMPRESS, HarnessTool.ASK_USER -> null
+        HarnessTool.LOAD_SKILL, HarnessTool.COMPRESS, HarnessTool.ASK_USER,
+        HarnessTool.KNOWLEDGE, HarnessTool.KB_ADD, HarnessTool.KB_LIST -> null
         HarnessTool.BASE -> if (isReadOnlyCommand(args["command"]?.jsonPrimitive?.content.orEmpty())) {
             null
         } else {

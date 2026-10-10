@@ -1390,6 +1390,33 @@ class ProviderClient(
         val TOOLS: List<ApiToolDefinition> = listOf(
             ApiToolDefinition(
                 function = ApiFunctionDefinition(
+                    name = "kb_search",
+                    description = "在 RAG 知识库中检索与查询相关的文档片段（语义向量检索，嵌入失败时回退关键词匹配）。query 为自然语言问题或关键词；topK 默认 3 最多 10。只读。",
+                    parameters = Json.parseToJsonElement(
+                        """{"type":"object","properties":{"query":{"type":"string","description":"检索问题或关键词"},"top_k":{"type":"integer","minimum":1,"maximum":10,"description":"最多返回片段数，默认 3"}},"required":["query"]}""",
+                    ).jsonObject,
+                ),
+            ),
+            ApiToolDefinition(
+                function = ApiFunctionDefinition(
+                    name = "kb_add",
+                    description = "把一段知识文本写入 RAG 知识库（自动分块并嵌入向量，嵌入失败时保留为关键词检索）。name 为文档名（手动引用 @kb:name 用）；content 为完整文本。写入后不可直接删除（用 kb_list 确认存在性）。",
+                    parameters = Json.parseToJsonElement(
+                        """{"type":"object","properties":{"name":{"type":"string","description":"文档名（用于手动 @kb:name 引用）"},"content":{"type":"string","description":"完整知识文本内容"}},"required":["name","content"]}""",
+                    ).jsonObject,
+                ),
+            ),
+            ApiToolDefinition(
+                function = ApiFunctionDefinition(
+                    name = "kb_list",
+                    description = "列出 RAG 知识库中的所有文档（名称、来源、分块数、嵌入状态）。用于确认文档是否已入库。只读。",
+                    parameters = Json.parseToJsonElement(
+                        """{"type":"object","properties":{}}""",
+                    ).jsonObject,
+                ),
+            ),
+            ApiToolDefinition(
+                function = ApiFunctionDefinition(
                     name = "build_script",
                     description = "管理智坊构建脚本并挂载到项目。新旧依赖不兼容时，先检查项目 Gradle/Flutter 配置，再 create 脚本并 bind 当前项目。脚本接口：第 1 个参数是项目目录；Android 第 2 个参数是 Gradle task；Flutter 第 2 个参数是完整 build 参数。支持 list/get/create/update/delete/bind/unbind。",
                     parameters = Json.parseToJsonElement(
