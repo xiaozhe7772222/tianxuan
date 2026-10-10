@@ -278,8 +278,11 @@ private fun ModelEditorContent(
     val intSetSaver = listSaver<Set<Int>, Int>(save = { it.toList() }, restore = { it.toSet() })
     var revealedKeyIndices by rememberSaveable(stateSaver = intSetSaver) { mutableStateOf(setOf<Int>()) }
     var showBatchImportKeysDialog by rememberSaveable { mutableStateOf(false) }
-    // Base URL 校验：必须以 http/https 开头
-    val urlValid = url.trim().startsWith("http://") || url.trim().startsWith("https://")
+    // Base URL 校验：与保存逻辑一致——normalizeUrl 会为不带 scheme 的地址自动补全
+    // https://（本地/私网地址则补 http://），避免用户填 "api.xxx.com/v1" 时 UI 校验
+    // 误判为无效而禁用保存按钮（保存侧其实能处理）。
+    val normalizedUrl = remember(url) { top.wkbin.tianxuan.core.tools.ProviderEndpointPolicy.normalizeUrl(url.trim()) }
+    val urlValid = normalizedUrl.startsWith("http://") || normalizedUrl.startsWith("https://")
 
     LaunchedEffect(initialApiKey) {
         if (keyList.all { it.isBlank() } && initialApiKey.isNotBlank()) {
@@ -1402,7 +1405,9 @@ private fun ModelEditorContent(
                 },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
                 shape = RoundedCornerShape(12.dp),
-                enabled = effectiveModels.isNotEmpty() && urlValid && tokenFieldsValid,
+                // 模型列表与 token 字段不阻断保存：URL 与 API Key 有效即可，
+                // 模型为空时用 provider 名兜底，token 字段格式错误由保存逻辑校验提示。
+                enabled = urlValid && combinedKey.isNotBlank(),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     RuntimeIcon(RuntimeIconName.Check, Modifier.size(18.dp), MaterialTheme.colorScheme.onPrimary)
