@@ -102,13 +102,25 @@ class VirtualDisplayCoordinator(
         }
 
         if (!ShowerServerManager.ensureServerStarted(context)) {
+            // 主动诊断：特权通道已生效但 server 启动失败。用同一条 Shizuku/Root 通道直接
+            // 探测真实目录可写性与 stderr，区分「通道执行失败」与「目录真的不可写」——
+            // 用户实测 /data/local/tmp 可写却判定失败，说明大概率是通道执行的问题。
+            val probe = privilegeManager.executeShellCommand(
+                "D=/data/local/tmp; touch \$D/.tianxuan_probe 2>&1; E1=\$?; rm -f \$D/.tianxuan_probe 2>/dev/null; echo PROBE_EXIT=\$E1; touch \$D/.tianxuan_probe2 2>&1; echo PROBE2_EXIT=\$?; rm -f \$D/.tianxuan_probe2",
+            )
             lastFailureReason = buildString {
                 append("shower-server 启动失败：特权通道已生效（${priv.effectiveMode}）但工作目录探测均失败。")
                 append("已尝试：${ShowerEnvironment.workDirCandidates}。")
-                append("这通常是 ROM 的 SELinux 或 init.rc 配置导致 shell uid 对这些目录无写权。")
-                append("可查看 logcat（tag: ShowerServerManager）获取 resolveWorkDir 的逐目录 stderr 详情。")
+                if (probe.success) {
+                    append("主动探测 /data/local/tmp 结果：${probe.stdout.take(200)}（exitCode=${probe.exitCode}）。")
+                    append("若 PROBE_EXIT=0 但 server 仍判定不可写，说明 ShowerServerManager 的探测命令在某一步失败，")
+                    append("需查看 logcat（tag: ShowerServerManager）。")
+                } else {
+                    append("特权通道执行探测命令失败（exitCode=${probe.exitCode}）：${probe.stderr.take(300)}。")
+                    append("这指向 Shizuku UserService 通道异常（binder 中断/未连接），而非目录权限问题。")
+                }
             }
-            logger.w("虚拟屏 server 启动失败：工作目录均不可写（特权通道 ${priv.effectiveMode} 已生效）")
+            logger.w("虚拟屏 server 启动失败：工作目录探测均失败；主动探测 exit=${probe.exitCode} stderr=${probe.stderr.take(200)}")
             return null
         }
         val metrics = context.resources.displayMetrics

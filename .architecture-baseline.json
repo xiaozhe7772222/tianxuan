@@ -122,6 +122,6 @@
         "tools/src/main/java/top/wkbin/tianxuan/core/tools/skill/ClawHubClient.kt": 415,
         "tools/src/main/java/top/wkbin/tianxuan/core/tools/skill/SkillPackageInspector.kt": 418,
         "harness/src/main/java/top/wkbin/tianxuan/harness/HarnessMessage.kt": 174,
-        "runtime/src/main/java/top/wkbin/tianxuan/runtime/virtualdisplay/VirtualDisplayCoordinator.kt": 163
+        "runtime/src/main/java/top/wkbin/tianxuan/runtime/virtualdisplay/VirtualDisplayCoordinator.kt": 205
     }
 }
