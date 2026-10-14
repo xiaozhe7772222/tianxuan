@@ -48,6 +48,41 @@ object ContextWindowPolicy {
     const val MAX_FOLDING_RATIO_PERCENT = 100
 
     /**
+     * 压缩保留策略（Retention）：对齐 DeepSeek Harness 的 ResolvedRetention union。
+     * 两种形式互斥（类型层消除"比例与 token 上限同时设置"的非法态）。
+     * - [Ratio]：按窗口比例折叠（百分比），保留最近若干条
+     * - [Tokens]：按 token 上限保留最近消息，更早的进摘要
+     */
+    sealed class Retention {
+        data class Ratio(val percent: Int) : Retention()
+        data class Tokens(val count: Int) : Retention()
+        companion object { val Default: Retention = Ratio(DEFAULT_FOLDING_RATIO_PERCENT) }
+    }
+    private fun Retention.resolve(): Pair<Int, Int> = when (this) {
+        is Retention.Ratio -> percent.coerceIn(MIN_FOLDING_RATIO_PERCENT, MAX_FOLDING_RATIO_PERCENT) to 0
+        is Retention.Tokens -> DEFAULT_FOLDING_RATIO_PERCENT to count.coerceAtLeast(0)
+    }
+    fun computeKeepFromIndex(
+        messages: List<HarnessMessage>,
+        budget: Int,
+        systemTokens: Int,
+        retention: Retention,
+        reserveTokens: Int? = null,
+        toolSchemaReserveTokens: Int = TOOL_SCHEMA_RESERVE_TOKENS,
+    ): Int {
+        val (ratioPercent, keepRecentTokens) = retention.resolve()
+        return computeKeepFromIndex(
+            messages = messages,
+            budget = budget,
+            systemTokens = systemTokens,
+            keepRecentTokens = keepRecentTokens,
+            reserveTokens = reserveTokens,
+            foldingRatioPercent = ratioPercent,
+            toolSchemaReserveTokens = toolSchemaReserveTokens,
+        )
+    }
+
+    /**
      * 图片的保守 token 估算（每张）。Claude 实际 ~1600/图，取高值方向安全：
      * 低估会让请求溢出 provider 400，高估只是折叠稍早。
      */

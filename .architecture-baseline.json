@@ -83,7 +83,7 @@
         "harness/src/main/java/top/wkbin/tianxuan/di/harness/KoinModule.kt": 633,
         "harness/src/main/java/top/wkbin/tianxuan/harness/AnthropicApi.kt": 645,
         "harness/src/main/java/top/wkbin/tianxuan/harness/ApprovalPolicyEngine.kt": 510,
-        "harness/src/main/java/top/wkbin/tianxuan/harness/ContextWindowPolicy.kt": 1075,
+        "harness/src/main/java/top/wkbin/tianxuan/harness/ContextWindowPolicy.kt": 1110,
         "harness/src/main/java/top/wkbin/tianxuan/harness/HarnessLoop.kt": 1731,
         "harness/src/main/java/top/wkbin/tianxuan/harness/HarnessProviderRunner.kt": 674,
         "harness/src/main/java/top/wkbin/tianxuan/harness/ProviderClient.kt": 1814,
