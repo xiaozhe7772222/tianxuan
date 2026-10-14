@@ -16,6 +16,8 @@ class ToolCallLoopDetector(
     private val maxSameCallFailures: Int = 2,
     private val maxIdenticalCallsStreak: Int = 3,
 ) {
+    /** 温和提醒阈值：相同调用首次连续重复达该次数时发 Warn（不阻断），给模型自我纠正机会。 */
+    private val warnThreshold = 2
     private val callHistory = mutableListOf<CallRecord>()
 
     data class CallRecord(
@@ -83,6 +85,13 @@ class ToolCallLoopDetector(
                 record.argsJson == currentArgsJson &&
                 !record.outputChanged
         }.count()
+
+        // 温和提醒阶段（对齐 DSH repeat-tool-reminder 设计）：先给模型自我纠正机会
+        if (identicalStreak >= warnThreshold && identicalStreak < maxIdenticalCallsStreak) {
+            return LoopVerdict.Warn(
+                "检测到重复调用：工具 `$toolName` 已连续执行 $identicalStreak 次且输出无变化。请检查是否需要调整策略或换用其他方法。",
+            )
+        }
 
         if (identicalStreak >= maxIdenticalCallsStreak) {
             return LoopVerdict.Block(
