@@ -102,7 +102,7 @@
         "runtime/browser/src/main/java/top/wkbin/tianxuan/runtime/browser/engine/AndroidInAppBrowserEngine.kt": 610,
         "runtime/browser/src/main/java/top/wkbin/tianxuan/runtime/browser/tools/BrowserMcpTools.kt": 739,
         "runtime/src/main/java/top/wkbin/tianxuan/runtime/DistroConfigurator.kt": 518,
-        "runtime/src/main/java/top/wkbin/tianxuan/runtime/LinuxRuntimeImpl.kt": 922,
+        "runtime/src/main/java/top/wkbin/tianxuan/runtime/LinuxRuntimeImpl.kt": 942,
         "runtime/src/main/java/top/wkbin/tianxuan/runtime/SshServiceManager.kt": 576,
         "runtime/src/main/java/top/wkbin/tianxuan/runtime/StorageManager.kt": 420,
         "runtime/src/main/java/top/wkbin/tianxuan/runtime/WorkspaceManager.kt": 970,

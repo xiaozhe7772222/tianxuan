@@ -44,6 +44,7 @@ class LinuxRuntimeImpl(
     private val prootInstaller: ProotInstaller,
     private val rootfsInstaller: RootfsInstaller,
     private val prootCommandBuilder: ProotCommandBuilder,
+    private val chrootCommandBuilder: top.wkbin.tianxuan.runtime.proot.ChrootCommandBuilder,
     private val ptyManager: PtyManager,
     private val shellExecutor: ShellExecutor,
     private val healthChecker: RuntimeHealthChecker,
@@ -53,6 +54,7 @@ class LinuxRuntimeImpl(
     private val hostBridge: HostBridge,
     private val distroConfigurator: DistroConfigurator,
     private val logger: AppLogger,
+    private val privilegeManager: top.wkbin.tianxuan.runtime.privilege.PrivilegeManager? = null,
 ) : LinuxRuntime {
 
     private val _state = MutableStateFlow<RuntimeState>(RuntimeState.NotInitialized)
@@ -494,8 +496,23 @@ class LinuxRuntimeImpl(
         val safeDistro = distroId?.lowercase()?.trim()?.takeIf { it.isNotBlank() } ?: _activeDistroId.value
         val mounts = storageMounts()
         val execution = resolveExecutionLayout(safeDistro, command.useQemuCompatibility)
-        shellExecutor.execute(
-            command = prootCommandBuilder.build(
+
+        // ROOT 模式优先走 chroot（零 syscall 拦截开销，原生 ext4 硬链接语义）；
+        // SHIZUKU/PROOT 走 PRoot（无 root 不能 chroot）。
+        val isChrootMode = privilegeManager?.state?.value?.effectiveMode == top.wkbin.tianxuan.core.model.ExecutionMode.ROOT
+        val cmd = if (isChrootMode) {
+            chrootCommandBuilder.build(
+                rootfsDir = execution.rootfsDir,
+                command = command,
+                workspaceDir = pathManager.workspaceDir,
+                homeDir = pathManager.homeDir(safeDistro),
+                optDir = execution.optDir,
+                tmpDir = pathManager.tmpDir,
+                attachmentsDir = pathManager.attachmentsDir,
+                mounts = mounts,
+            )
+        } else {
+            prootCommandBuilder.build(
                 prootBinary = pathManager.activeProotFile(),
                 rootfsDir = execution.rootfsDir,
                 workspaceDir = pathManager.workspaceDir,
@@ -506,8 +523,11 @@ class LinuxRuntimeImpl(
                 command = command,
                 mounts = mounts,
                 emulatorBinary = execution.emulatorBinary,
-            ),
-            environment = pathManager.hostProcessEnvironment(safeDistro, execution.rootfsDir),
+            )
+        }
+        shellExecutor.execute(
+            command = cmd,
+            environment = if (isChrootMode) emptyMap() else pathManager.hostProcessEnvironment(safeDistro, execution.rootfsDir),
             timeoutMs = command.timeoutMs,
             onOutput = command.onOutput,
         )

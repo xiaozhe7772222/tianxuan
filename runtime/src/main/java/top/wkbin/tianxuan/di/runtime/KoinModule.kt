@@ -53,6 +53,7 @@ import top.wkbin.tianxuan.runtime.webchat.WebChatBridgeServer
 /** Dependency registrations owned by the runtime module. */
 val runtimeModule = module {
     single<ProotCommandBuilder> { ProotCommandBuilder(environmentResolver = get(), logger = get()) }
+    single<top.wkbin.tianxuan.runtime.proot.ChrootCommandBuilder> { top.wkbin.tianxuan.runtime.proot.ChrootCommandBuilder() }
 
     single<BackgroundTaskRegistry> { BackgroundTaskRegistry() }
 
@@ -85,6 +86,7 @@ val runtimeModule = module {
             prootInstaller = get(),
             rootfsInstaller = get(),
             prootCommandBuilder = get(),
+            chrootCommandBuilder = get(),
             ptyManager = get(),
             shellExecutor = get(),
             healthChecker = get(),
@@ -94,6 +96,7 @@ val runtimeModule = module {
             hostBridge = get(),
             distroConfigurator = get(),
             logger = get(),
+            privilegeManager = getOrNull(),
         )
     }
 
