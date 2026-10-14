@@ -10,6 +10,7 @@ import top.wkbin.tianxuan.harness.HarnessLoop
 import top.wkbin.tianxuan.harness.HarnessPathResolver
 import top.wkbin.tianxuan.harness.knowledge.EmbeddingClient
 import top.wkbin.tianxuan.harness.knowledge.KnowledgeManager
+import top.wkbin.tianxuan.harness.goal.GoalManager
 import top.wkbin.tianxuan.harness.HarnessProviderRunner
 import top.wkbin.tianxuan.harness.HarnessToolRoundRunner
 import top.wkbin.tianxuan.harness.HarnessWorkspaceRecommendations
@@ -250,6 +251,7 @@ val harnessModule = module {
             skillRepository = get(),
             settingsDataStore = get(),
             knowledgeManager = getOrNull(),
+            goalManager = getOrNull(),
         )
     }
 
@@ -506,6 +508,8 @@ val harnessModule = module {
             settingsDataStore = get(),
         )
     }
+
+    single<GoalManager> { GoalManager() }
 
     single<LaneManager> { LaneManager(repository = get(), treeStore = get()) }
 

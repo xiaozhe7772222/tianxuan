@@ -56,5 +56,12 @@ object ToolStatusDescriber {
         HarnessTool.KNOWLEDGE -> "正在检索知识库：${arg(args, "query")?.take(MAX_STATUS_ARG_LENGTH) ?: "查询"}"
         HarnessTool.KB_ADD -> "正在写入知识库文档：${arg(args, "name")?.take(MAX_STATUS_ARG_LENGTH) ?: "新文档"}"
         HarnessTool.KB_LIST -> "正在列出知识库文档"
+        HarnessTool.GOAL_CREATE -> "正在创建 Goal：${arg(args, "objective")?.take(MAX_STATUS_ARG_LENGTH) ?: ""}"
+        HarnessTool.GOAL_PAUSE -> "正在暂停 Goal"
+        HarnessTool.GOAL_RESUME -> "正在恢复 Goal"
+        HarnessTool.GOAL_COMPLETE -> "正在完成 Goal"
+        HarnessTool.GOAL_BLOCK -> "正在阻塞 Goal：${arg(args, "reason")?.take(MAX_STATUS_ARG_LENGTH) ?: ""}"
+        HarnessTool.GOAL_STATUS -> "正在查看 Goal 状态"
+        HarnessTool.GOAL_CLEAR -> "正在清除 Goal"
     }
 }

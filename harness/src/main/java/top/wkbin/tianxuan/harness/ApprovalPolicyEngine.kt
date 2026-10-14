@@ -143,7 +143,10 @@ class ApprovalPolicyEngine(
             HarnessTool.READ, HarnessTool.MEMORY, HarnessTool.PLAN, HarnessTool.SCRATCHPAD,
             HarnessTool.HISTORY_SEARCH, HarnessTool.HISTORY_READ, HarnessTool.SUBAGENT, HarnessTool.LOAD_RULE,
             HarnessTool.LOAD_SKILL, HarnessTool.RENDER_SURFACE, HarnessTool.COMPRESS, HarnessTool.ASK_USER,
-            HarnessTool.KNOWLEDGE, HarnessTool.KB_ADD, HarnessTool.KB_LIST ->
+            HarnessTool.KNOWLEDGE, HarnessTool.KB_ADD, HarnessTool.KB_LIST,
+            HarnessTool.GOAL_CREATE, HarnessTool.GOAL_PAUSE, HarnessTool.GOAL_RESUME,
+            HarnessTool.GOAL_COMPLETE, HarnessTool.GOAL_BLOCK, HarnessTool.GOAL_STATUS,
+            HarnessTool.GOAL_CLEAR ->
                 ApprovalDecision(false)
         }
     }
@@ -166,7 +169,10 @@ class ApprovalPolicyEngine(
         HarnessTool.READ, HarnessTool.MEMORY, HarnessTool.PLAN, HarnessTool.SCRATCHPAD,
         HarnessTool.HISTORY_SEARCH, HarnessTool.HISTORY_READ, HarnessTool.LOAD_RULE,
         HarnessTool.LOAD_SKILL, HarnessTool.COMPRESS, HarnessTool.ASK_USER,
-        HarnessTool.KNOWLEDGE, HarnessTool.KB_ADD, HarnessTool.KB_LIST -> null
+        HarnessTool.KNOWLEDGE, HarnessTool.KB_ADD, HarnessTool.KB_LIST,
+        HarnessTool.GOAL_CREATE, HarnessTool.GOAL_PAUSE, HarnessTool.GOAL_RESUME,
+        HarnessTool.GOAL_COMPLETE, HarnessTool.GOAL_BLOCK, HarnessTool.GOAL_STATUS,
+        HarnessTool.GOAL_CLEAR -> null
         HarnessTool.BASE -> if (isReadOnlyCommand(args["command"]?.jsonPrimitive?.content.orEmpty())) {
             null
         } else {

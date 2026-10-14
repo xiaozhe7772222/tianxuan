@@ -89,6 +89,7 @@ class ToolExecutor(
     private val skillRepository: top.wkbin.tianxuan.core.database.AgentSkillRepository? = null,
     private val settingsDataStore: AgentPreferences? = null,
     private val knowledgeManager: top.wkbin.tianxuan.harness.knowledge.KnowledgeManager? = null,
+    private val goalManager: top.wkbin.tianxuan.harness.goal.GoalManager? = null,
 ) {
     suspend fun execute(
         toolCall: ToolCall,
@@ -392,6 +393,13 @@ class ToolExecutor(
             HarnessTool.KNOWLEDGE -> executeKnowledgeSearch(args)
             HarnessTool.KB_ADD -> executeKnowledgeAdd(args)
             HarnessTool.KB_LIST -> executeKnowledgeList()
+            HarnessTool.GOAL_CREATE -> executeGoalCreate(args)
+            HarnessTool.GOAL_PAUSE -> executeGoalPause()
+            HarnessTool.GOAL_RESUME -> executeGoalResume()
+            HarnessTool.GOAL_COMPLETE -> executeGoalComplete()
+            HarnessTool.GOAL_BLOCK -> executeGoalBlock(args)
+            HarnessTool.GOAL_STATUS -> executeGoalStatus()
+            HarnessTool.GOAL_CLEAR -> executeGoalClear()
             HarnessTool.BUILD_SCRIPT -> buildScriptToolExecutor?.execute(args, workspace) ?: (false to "未初始化构建脚本管理器")
             HarnessTool.SUBAGENT -> if (rawToolName.equals("invoke_dual_agent", ignoreCase = true)) {
                 dualAgentCoordinator?.executeFromTool(args, sessionId, workspace) ?: (false to "未初始化双智能体编排器")
@@ -1609,6 +1617,97 @@ class ToolExecutor(
             }
         } catch (e: Exception) {
             false to "知识库读取失败：${e.message ?: e::class.simpleName}"
+        }
+    }
+
+    private suspend fun executeGoalCreate(args: JsonObject): Pair<Boolean, String> {
+        val gm = goalManager ?: return false to "Goal 管理器未初始化"
+        val objective = args["objective"]?.jsonPrimitive?.contentOrNull?.trim() ?: ""
+        if (objective.isBlank()) return false to "goal_create 需要 objective 参数"
+        val maxRounds = args["max_rounds"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 256
+        return when (val r = gm.create(objective, maxRounds)) {
+            is top.wkbin.tianxuan.harness.goal.GoalResult.Success -> {
+                true to "Goal 已创建：${r.goal.objective}（ID: ${r.goal.id}，最大轮数: ${r.goal.maxGoalRounds}，状态: ${r.goal.phase}）。模型应在每轮工具调用前调用 goal_status 查看进度，任务完成时调用 goal_complete 标记。"
+            }
+            is top.wkbin.tianxuan.harness.goal.GoalResult.InvalidTransition ->
+                false to "无法创建 Goal：当前 Goal 处于 ${r.current} 状态（需先 goal_complete 或 goal_clear）"
+            else -> false to "Goal 创建失败"
+        }
+    }
+
+    private suspend fun executeGoalPause(): Pair<Boolean, String> {
+        val gm = goalManager ?: return false to "Goal 管理器未初始化"
+        return when (val r = gm.pause()) {
+            is top.wkbin.tianxuan.harness.goal.GoalResult.Success -> true to "Goal 已暂停（可 goal_resume 恢复）"
+            is top.wkbin.tianxuan.harness.goal.GoalResult.NotFound -> false to "无当前 Goal"
+            is top.wkbin.tianxuan.harness.goal.GoalResult.InvalidTransition -> false to "无法暂停：当前 Goal 处于 ${r.current} 状态（仅 ACTIVE 可暂停）"
+            else -> false to "Goal 暂停失败"
+        }
+    }
+
+    private suspend fun executeGoalResume(): Pair<Boolean, String> {
+        val gm = goalManager ?: return false to "Goal 管理器未初始化"
+        return when (val r = gm.resume()) {
+            is top.wkbin.tianxuan.harness.goal.GoalResult.Success -> {
+                true to "Goal 已恢复：${r.goal.objective}（已用轮数 ${r.goal.roundsUsed}/${r.goal.maxGoalRounds}）"
+            }
+            is top.wkbin.tianxuan.harness.goal.GoalResult.NotFound -> false to "无当前 Goal"
+            is top.wkbin.tianxuan.harness.goal.GoalResult.MaxRoundsExceeded ->
+                false to "Goal 轮数已耗尽（${r.roundsUsed}/${r.maxRounds}），需增大 max_rounds 或 goal_clear 后重新创建"
+            is top.wkbin.tianxuan.harness.goal.GoalResult.InvalidTransition ->
+                false to "无法恢复：当前 Goal 处于 ${r.current} 状态"
+            else -> false to "Goal 恢复失败"
+        }
+    }
+
+    private suspend fun executeGoalComplete(): Pair<Boolean, String> {
+        val gm = goalManager ?: return false to "Goal 管理器未初始化"
+        return when (val r = gm.complete()) {
+            is top.wkbin.tianxuan.harness.goal.GoalResult.Success ->
+                true to "Goal 已完成：${r.goal.objective}（共 ${r.goal.roundsUsed} 轮）。"
+            is top.wkbin.tianxuan.harness.goal.GoalResult.NotFound -> false to "无当前 Goal"
+            is top.wkbin.tianxuan.harness.goal.GoalResult.InvalidTransition ->
+                false to "无法完成：当前 Goal 处于 ${r.current} 状态（需先 goal_resume）"
+            else -> false to "Goal 完成失败"
+        }
+    }
+
+    private suspend fun executeGoalBlock(args: JsonObject): Pair<Boolean, String> {
+        val gm = goalManager ?: return false to "Goal 管理器未初始化"
+        val reason = args["reason"]?.jsonPrimitive?.contentOrNull?.trim() ?: ""
+        if (reason.isBlank()) return false to "goal_block 需要 reason 参数"
+        return when (val r = gm.block(reason)) {
+            is top.wkbin.tianxuan.harness.goal.GoalResult.Success ->
+                true to "Goal 已阻塞：${r.goal.blockedReason}。可 goal_resume 恢复或 goal_clear 清除。"
+            is top.wkbin.tianxuan.harness.goal.GoalResult.NotFound -> false to "无当前 Goal"
+            is top.wkbin.tianxuan.harness.goal.GoalResult.InvalidTransition ->
+                false to "无法阻塞：当前 Goal 处于 ${r.current} 状态（仅 ACTIVE 可阻塞）"
+            else -> false to "Goal 阻塞失败"
+        }
+    }
+
+    private suspend fun executeGoalStatus(): Pair<Boolean, String> {
+        val gm = goalManager ?: return false to "Goal 管理器未初始化"
+        val goal = gm.currentGoal.value
+        return if (goal == null) {
+            true to "无当前 Goal。可用 goal_create 创建。"
+        } else {
+            true to buildString {
+                append("Goal: ${goal.objective}\n")
+                append("状态: ${goal.phase}（${goal.activation}）\n")
+                append("轮数: ${goal.roundsUsed}/${goal.maxGoalRounds}")
+                if (goal.blockedReason != null) append("\n阻塞原因: ${goal.blockedReason}")
+            }
+        }
+    }
+
+    private suspend fun executeGoalClear(): Pair<Boolean, String> {
+        val gm = goalManager ?: return false to "Goal 管理器未初始化"
+        return when (val r = gm.clear()) {
+            is top.wkbin.tianxuan.harness.goal.GoalResult.Success ->
+                true to "Goal 已清除（${r.goal.objective}）。"
+            is top.wkbin.tianxuan.harness.goal.GoalResult.NotFound -> false to "无当前 Goal"
+            else -> false to "Goal 清除失败"
         }
     }
 

@@ -539,6 +539,13 @@ internal fun toolName(tool: HarnessTool, rawToolName: String? = null): String {
         HarnessTool.KNOWLEDGE -> "kb_search"
         HarnessTool.KB_ADD -> "kb_add"
         HarnessTool.KB_LIST -> "kb_list"
+        HarnessTool.GOAL_CREATE -> "goal_create"
+        HarnessTool.GOAL_PAUSE -> "goal_pause"
+        HarnessTool.GOAL_RESUME -> "goal_resume"
+        HarnessTool.GOAL_COMPLETE -> "goal_complete"
+        HarnessTool.GOAL_BLOCK -> "goal_block"
+        HarnessTool.GOAL_STATUS -> "goal_status"
+        HarnessTool.GOAL_CLEAR -> "goal_clear"
     }
 }
 

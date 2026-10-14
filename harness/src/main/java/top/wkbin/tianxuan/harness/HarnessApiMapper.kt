@@ -59,6 +59,13 @@ internal object HarnessApiMapper {
             lower == "kb_search" -> HarnessTool.KNOWLEDGE
             lower == "kb_add" -> HarnessTool.KB_ADD
             lower == "kb_list" -> HarnessTool.KB_LIST
+            lower == "goal_create" -> HarnessTool.GOAL_CREATE
+            lower == "goal_pause" -> HarnessTool.GOAL_PAUSE
+            lower == "goal_resume" -> HarnessTool.GOAL_RESUME
+            lower == "goal_complete" -> HarnessTool.GOAL_COMPLETE
+            lower == "goal_block" -> HarnessTool.GOAL_BLOCK
+            lower == "goal_status" -> HarnessTool.GOAL_STATUS
+            lower == "goal_clear" -> HarnessTool.GOAL_CLEAR
             lower == "use_capability" -> HarnessTool.MCP
             trimmed.startsWith("mcp__") -> HarnessTool.MCP
             else -> HarnessTool.BASE
@@ -89,5 +96,12 @@ internal object HarnessApiMapper {
         HarnessTool.KNOWLEDGE -> "kb_search"
         HarnessTool.KB_ADD -> "kb_add"
         HarnessTool.KB_LIST -> "kb_list"
+        HarnessTool.GOAL_CREATE -> "goal_create"
+        HarnessTool.GOAL_PAUSE -> "goal_pause"
+        HarnessTool.GOAL_RESUME -> "goal_resume"
+        HarnessTool.GOAL_COMPLETE -> "goal_complete"
+        HarnessTool.GOAL_BLOCK -> "goal_block"
+        HarnessTool.GOAL_STATUS -> "goal_status"
+        HarnessTool.GOAL_CLEAR -> "goal_clear"
     }
 }

@@ -77,7 +77,10 @@ fun ToolDiffView(
             HarnessTool.PROCESS, HarnessTool.HOST, HarnessTool.DOWNLOAD, HarnessTool.MEMORY, HarnessTool.PLAN, HarnessTool.SCRATCHPAD,
             HarnessTool.HISTORY_SEARCH, HarnessTool.HISTORY_READ, HarnessTool.BUILD_SCRIPT, HarnessTool.SUBAGENT, HarnessTool.MCP,
             HarnessTool.LOAD_RULE, HarnessTool.LOAD_SKILL, HarnessTool.COMPRESS, HarnessTool.ASK_USER, HarnessTool.RENDER_SURFACE,
-            HarnessTool.KNOWLEDGE, HarnessTool.KB_ADD, HarnessTool.KB_LIST -> BaseToolDiff(call, result)
+            HarnessTool.KNOWLEDGE, HarnessTool.KB_ADD, HarnessTool.KB_LIST,
+            HarnessTool.GOAL_CREATE, HarnessTool.GOAL_PAUSE, HarnessTool.GOAL_RESUME,
+            HarnessTool.GOAL_COMPLETE, HarnessTool.GOAL_BLOCK, HarnessTool.GOAL_STATUS,
+            HarnessTool.GOAL_CLEAR -> BaseToolDiff(call, result)
         }
     }
 }
