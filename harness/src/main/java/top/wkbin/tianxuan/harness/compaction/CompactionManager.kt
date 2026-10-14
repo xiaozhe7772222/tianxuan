@@ -168,7 +168,17 @@ class CompactionManager(
         }
         val llmSummary = if (model != null && summarizer != null && collapsedForSummary.isNotEmpty()) {
             try {
-                summarizer.generateSummary(model, collapsedForSummary, previousSummaries, summaryContext)
+                val generated = summarizer.generateSummary(model, collapsedForSummary, previousSummaries, summaryContext)
+                // 摘要收敛校验（对齐 DeepSeek Harness compaction region.ts:417-422）：
+                // LLM 摘要不得比被折叠段更长——否则压缩反而让上下文变大，属于静默错误。
+                // 不满足则回退机械摘要（下方 buildHistorySummary 有字符级截断兜底）。
+                if (generated != null &&
+                    ContextWindowPolicy.estimateTokens(generated) < collapsedForSummary.sumOf(::messageTokens)
+                ) {
+                    generated
+                } else {
+                    null
+                }
             } catch (cancellation: kotlinx.coroutines.CancellationException) {
                 throw cancellation
             } catch (throwable: Throwable) {
