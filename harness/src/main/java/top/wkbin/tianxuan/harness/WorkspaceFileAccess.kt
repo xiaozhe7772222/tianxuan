@@ -8,6 +8,7 @@ import top.wkbin.tianxuan.harness.text.UnifiedDiffGenerator
 import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 data class WorkspaceEntry(
@@ -36,6 +37,21 @@ class WorkspaceFileAccess(
     private val globalRootCanonical: File? = null,
 ) {
     private val rootCanonical: File = root.absoluteFile.canonicalFile
+
+    /**
+     * 文件版本守卫（对齐 DeepSeek Harness fs 模块）：read 时记录文件版本，
+     * write/edit 时校验版本未变，防止多 agent 并发写同一文件时静默覆盖。
+     * 版本 token = `size:lastModified`（简单可靠，文件被外部修改即变化）。
+     */
+    private val fileVersions = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** per-file 写互斥锁：同一文件的 read→edit→write 窗口串行化，防止交错。 */
+    private val fileLocks = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.sync.Mutex>()
+
+    private fun versionOf(file: File): String = "${file.length()}:${file.lastModified()}"
+
+    private fun lockFor(path: String): kotlinx.coroutines.sync.Mutex =
+        fileLocks.getOrPut(path) { kotlinx.coroutines.sync.Mutex() }
 
     suspend fun list(path: String): AppResult<List<WorkspaceEntry>> = withContext(Dispatchers.IO) {
         try {
@@ -74,7 +90,7 @@ class WorkspaceFileAccess(
                 "文件过大（${file.length()} 字节，上限 ${if (pagedSpillRead) MAX_HARNESS_ARTIFACT_BYTES else MAX_READ_BYTES}）。" +
                     "请用 base 执行 grep -n 定位关键行号，再用 read(path, offset, limit) 分段精读。"
             }
-            if (pagedSpillRead) {
+            val result = if (pagedSpillRead) {
                 AppResult.Success(readPagedLines(file, path, offset!!, limit!!))
             } else {
                 val content = file.readText(Charsets.UTF_8)
@@ -91,6 +107,11 @@ class WorkspaceFileAccess(
                     AppResult.Success(header + selected.joinToString("\n"))
                 }
             }
+            // 读取成功后记录文件版本（供 write/edit 的 stale-version 校验）
+            if (result is AppResult.Success) {
+                fileVersions[path] = versionOf(file)
+            }
+            result
         } catch (throwable: Throwable) {
             failure(path, throwable)
         }
@@ -114,24 +135,37 @@ class WorkspaceFileAccess(
     }
 
     suspend fun write(path: String, content: String): AppResult<Unit> = withContext(Dispatchers.IO) {
-        try {
-            val contentBytes = content.toByteArray(Charsets.UTF_8).size
-            require(contentBytes <= MAX_WRITE_BYTES) { "内容过长（$contentBytes 字节，上限 $MAX_WRITE_BYTES）" }
-            val file = resolveWritable(path)
-            file.parentFile?.mkdirs()
-            val temporary = File(file.parentFile, ".${file.name}.tmp-${System.nanoTime()}")
+        // per-file 互斥锁 + stale-version 守卫（对齐 DSH fs-observation-policy）：
+        // 同一文件的 read→edit→write 窗口串行化，且若文件被外部修改则拒绝覆盖。
+        lockFor(path).withLock {
             try {
-                temporary.writeText(content, Charsets.UTF_8)
-                if (!temporary.renameTo(file)) {
-                    temporary.copyTo(file, overwrite = true)
+                val contentBytes = content.toByteArray(Charsets.UTF_8).size
+                require(contentBytes <= MAX_WRITE_BYTES) { "内容过长（$contentBytes 字节，上限 $MAX_WRITE_BYTES）" }
+                val file = resolveWritable(path)
+                file.parentFile?.mkdirs()
+                // stale-version 守卫：已有版本记录且当前版本不一致时拒绝（外部已修改）
+                fileVersions[path]?.let { recorded ->
+                    if (recorded != versionOf(file)) {
+                        return@withLock failure(path, IllegalStateException(
+                            "文件已被外部修改（stale version），请重新 read 确认最新内容后再写。"
+                        ))
+                    }
+                }
+                val temporary = File(file.parentFile, ".${file.name}.tmp-${System.nanoTime()}")
+                try {
+                    temporary.writeText(content, Charsets.UTF_8)
+                    if (!temporary.renameTo(file)) {
+                        temporary.copyTo(file, overwrite = true)
+                        temporary.delete()
+                    }
+                } finally {
                     temporary.delete()
                 }
-            } finally {
-                temporary.delete()
+                fileVersions[path] = versionOf(file)
+                AppResult.Success(Unit)
+            } catch (throwable: Throwable) {
+                failure(path, throwable)
             }
-            AppResult.Success(Unit)
-        } catch (throwable: Throwable) {
-            failure(path, throwable)
         }
     }
 
@@ -172,26 +206,37 @@ class WorkspaceFileAccess(
      */
     suspend fun editDetailed(path: String, oldText: String, newText: String): AppResult<WorkspaceEditOutcome> =
         withContext(Dispatchers.IO) {
-            try {
-                require(oldText.isNotEmpty()) { "oldText 不能为空" }
-                val file = resolveWritable(path)
-                check(file.isFile) { "不是文件：${display(path)}" }
-                check(file.length() <= MAX_EDIT_BYTES) {
-                    "文件过大（${file.length()} 字节，上限 $MAX_EDIT_BYTES），请使用 base 的流式文本工具进行定点修改"
+            // per-file 互斥锁 + stale-version 守卫：防止并发 edit 交错覆盖
+            lockFor(path).withLock {
+                try {
+                    require(oldText.isNotEmpty()) { "oldText 不能为空" }
+                    val file = resolveWritable(path)
+                    check(file.isFile) { "不是文件：${display(path)}" }
+                    check(file.length() <= MAX_EDIT_BYTES) {
+                        "文件过大（${file.length()} 字节，上限 $MAX_EDIT_BYTES），请使用 base 的流式文本工具进行定点修改"
+                    }
+                    // stale-version 守卫：edit 前确认文件未被外部修改
+                    fileVersions[path]?.let { recorded ->
+                        if (recorded != versionOf(file)) {
+                            return@withLock failure(path, IllegalStateException(
+                                "文件已被外部修改（stale version），请重新 read 确认最新内容后再编辑。"
+                            ))
+                        }
+                    }
+                    val content = file.readText(Charsets.UTF_8)
+                    val result = TextReplacerEngine.replace(content, oldText, newText)
+                    write(path, result.updated)
+                        .errorOrNull()?.let { throw it.cause ?: IllegalStateException(it.message) }
+                    AppResult.Success(
+                        WorkspaceEditOutcome(
+                            strategy = result.strategy,
+                            replacements = result.replacements,
+                            diff = UnifiedDiffGenerator.diff(content, result.updated, path.trim().trimStart('/')),
+                        ),
+                    )
+                } catch (throwable: Throwable) {
+                    failure(path, throwable)
                 }
-                val content = file.readText(Charsets.UTF_8)
-                val result = TextReplacerEngine.replace(content, oldText, newText)
-                write(path, result.updated)
-                    .errorOrNull()?.let { throw it.cause ?: IllegalStateException(it.message) }
-                AppResult.Success(
-                    WorkspaceEditOutcome(
-                        strategy = result.strategy,
-                        replacements = result.replacements,
-                        diff = UnifiedDiffGenerator.diff(content, result.updated, path.trim().trimStart('/')),
-                    ),
-                )
-            } catch (throwable: Throwable) {
-                failure(path, throwable)
             }
         }
 

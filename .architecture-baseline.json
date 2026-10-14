@@ -124,6 +124,7 @@
         "harness/src/main/java/top/wkbin/tianxuan/harness/HarnessMessage.kt": 181,
         "runtime/src/main/java/top/wkbin/tianxuan/runtime/virtualdisplay/VirtualDisplayCoordinator.kt": 205,
         "harness/src/main/java/top/wkbin/tianxuan/harness/HarnessApiMapper.kt": 107,
-        "harness/src/main/java/top/wkbin/tianxuan/harness/projection/ToolStatusDescriber.kt": 67
+        "harness/src/main/java/top/wkbin/tianxuan/harness/projection/ToolStatusDescriber.kt": 67,
+        "harness/src/main/java/top/wkbin/tianxuan/harness/WorkspaceFileAccess.kt": 402
     }
 }
