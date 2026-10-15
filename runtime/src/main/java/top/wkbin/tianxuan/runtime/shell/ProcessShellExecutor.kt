@@ -68,6 +68,8 @@ class ProcessShellExecutor(
                 stdout = drained?.get(0).orEmpty(),
                 stderr = drained?.get(1).orEmpty(),
                 durationMs = System.currentTimeMillis() - startedAt,
+                timedOut = false,
+                aborted = false,
             )
         } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
             process.destroyForcibly()
@@ -101,10 +103,13 @@ class ProcessShellExecutor(
                     append("Command timed out after ${timeoutMs}ms")
                 },
                 durationMs = System.currentTimeMillis() - startedAt,
+                timedOut = true,   // 自身 timer 先到期
+                aborted = false,
             )
         } catch (cancellation: kotlinx.coroutines.CancellationException) {
             // 用户主动取消编译：强杀 PRoot 进程树，避免 Gradle 后台继续跑
             process.destroyForcibly()
+            // 上游取消先到（first-cause）：模型/用户取消，非命令自身超时
             throw cancellation
         } finally {
             process.destroy()
