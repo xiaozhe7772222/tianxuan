@@ -261,9 +261,31 @@ class ToolExecutor(
         val spillPath = fileAccess?.let { ToolOutputSpillStore.spill(it, toolName, output) }
         // 差异化截断：命令/构建/日志保留尾部（报错在末尾），读取/搜索保留头部。
         val retention = ToolOutputRetention.forTool(toolName)
+        // 双段保留（对齐 DSH OutputLedger）：默认保留尾部 80% + 头部 20%，
+        // 确保关键上下文（命令开头参数）不丢失
         val kept = when (retention) {
-            OutputRetention.TAIL -> keepTailWholeLines(folded, TRUNCATE_KEEP_LENGTH)
-            OutputRetention.HEAD -> keepHeadWholeLines(folded, TRUNCATE_KEEP_LENGTH)
+            OutputRetention.TAIL -> {
+                val tailBudget = (TRUNCATE_KEEP_LENGTH * 4) / 5
+                val headBudget = TRUNCATE_KEEP_LENGTH / 5
+                val tail = keepTailWholeLines(folded, tailBudget)
+                val head = keepHeadWholeLines(folded, headBudget)
+                if (tail.length + head.length < folded.length) {
+                    head + "\n\n[... 中间内容已省略 ...]\n\n" + tail
+                } else {
+                    tail
+                }
+            }
+            OutputRetention.HEAD -> {
+                val headBudget = (TRUNCATE_KEEP_LENGTH * 4) / 5
+                val tailBudget = TRUNCATE_KEEP_LENGTH / 5
+                val head = keepHeadWholeLines(folded, headBudget)
+                val tail = keepTailWholeLines(folded, tailBudget)
+                if (head.length + tail.length < folded.length) {
+                    head + "\n\n[... 中间内容已省略 ...]\n\n" + tail
+                } else {
+                    head
+                }
+            }
         }
         val totalLines = output.count { it == '\n' } + 1
         val keptLines = kept.count { it == '\n' } + 1
