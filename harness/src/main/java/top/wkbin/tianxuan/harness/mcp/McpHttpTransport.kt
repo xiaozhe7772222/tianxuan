@@ -125,7 +125,7 @@ class McpHttpTransport(
                 val response = exchange(session, "tools/call", params)
                 val result = response.result?.let { json.decodeFromJsonElement(McpCallToolResult.serializer(), it) }
                     ?: error("MCP tools/call did not return a result")
-                !result.isError to result.content.joinToString("\n") { it.text.orEmpty() }
+                !result.isError to result.content.joinToString("\n") { formatContentItem(it) }
                     .ifBlank { if (result.isError) "执行失败" else "执行成功" }
             } catch (t: Throwable) {
                 if (t is CancellationException) throw t
@@ -143,7 +143,7 @@ class McpHttpTransport(
                     )
                     val retryResult = retryResponse.result?.let { json.decodeFromJsonElement(McpCallToolResult.serializer(), it) }
                         ?: error("MCP tools/call did not return a result")
-                    return@withContext (!retryResult.isError to retryResult.content.joinToString("\n") { it.text.orEmpty() }
+                    return@withContext (!retryResult.isError to retryResult.content.joinToString("\n") { formatContentItem(it) }
                         .ifBlank { if (retryResult.isError) "执行失败" else "执行成功" })
                 }
                 if (isTransportFailure(t)) {

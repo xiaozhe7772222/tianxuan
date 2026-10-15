@@ -105,7 +105,7 @@ class McpStdioTransport(
                 val result = response.result?.let {
                     json.decodeFromJsonElement(McpCallToolResult.serializer(), it)
                 } ?: error("MCP tools/call did not return a result")
-                !result.isError to result.content.joinToString("\n") { it.text.orEmpty() }
+                !result.isError to result.content.joinToString("\n") { formatContentItem(it) }
                     .ifBlank { if (result.isError) "执行失败" else "执行成功" }
             }
         } catch (e: McpJsonRpcErrorException) {
