@@ -11,7 +11,7 @@ import top.wkbin.tianxuan.core.database.task.AgentTaskDao
  * 提成常量而不是散落的字面量：过去 `@Database(version = 53)` 与迁移链终点各写一处，
  * 改版本时漏改任一处，Room 只会在用户设备上抛 IllegalStateException 才暴露。
  */
-const val SCHEMA_VERSION: Int = 55
+const val SCHEMA_VERSION: Int = 56
 
 @Database(
     entities = [

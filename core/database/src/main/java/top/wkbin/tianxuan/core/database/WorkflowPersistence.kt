@@ -79,15 +79,19 @@ data class WorkflowScheduleEntity(
     val workflowId: String,
     val name: String,
     val enabled: Boolean,
-    // WorkflowScheduleRepeat.name：DAILY / INTERVAL / ONCE
+    // WorkflowScheduleRepeat.name：DAILY / INTERVAL / ONCE / WEEKLY / CRON
     val repeatType: String,
-    // DAILY 用：每天 hour:minute 触发（设备本地时区）
+    // DAILY/WEEKLY 用：每天 hour:minute 触发（设备本地时区）
     val hour: Int?,
     val minute: Int?,
     // INTERVAL 用：间隔分钟数（WorkManager 周期下限 15）
     val intervalMinutes: Int?,
     // ONCE 用：一次性触发的目标时刻
     val onceAtEpochMillis: Long?,
+    // WEEKLY 用：逗号分隔的工作日（1=周一...7=周日，如 "1,3,5"=周一三五）
+    val weekDays: String? = null,
+    // CRON 用：五字段 Vixie cron 表达式（"分 时 日 月 周"，如 "0 9 * * 1-5"=工作日 9 点）
+    val cronExpression: String? = null,
     // JSON 对象：{"KEY":"VALUE"}
     val variablesJson: String,
     val workspacePath: String,

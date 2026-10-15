@@ -58,7 +58,58 @@ class WorkManagerScheduleDispatcher(
                     .build()
                 workManager.enqueueUniqueWork(uniqueName, ExistingWorkPolicy.REPLACE, request)
             }
+            WorkflowScheduleRepeat.WEEKLY -> {
+                // 周指定工作日（1=周一...7=周日），每次用 OneTime + 计算下一次匹配日
+                val hour = entity.hour ?: return
+                val minute = entity.minute ?: return
+                val weekDaysStr = entity.weekDays ?: return
+                val weekDays = weekDaysStr.split(',').mapNotNull { it.trim().toIntOrNull() }.filter { it in 1..7 }
+                if (weekDays.isEmpty()) return
+                val delay = nextWeeklyDelayMs(hour, minute, weekDays)
+                val request = OneTimeWorkRequestBuilder<WorkflowScheduleWorker>()
+                    .setInitialDelay(delay, TimeUnit.MILLISECONDS)
+                    .setInputData(inputData)
+                    .addTag(TAG)
+                    .build()
+                workManager.enqueueUniqueWork(uniqueName, ExistingWorkPolicy.REPLACE, request)
+            }
+            WorkflowScheduleRepeat.CRON -> {
+                // 五字段 Vixie cron：每次 OneTime + 计算下一次匹配时刻
+                val cronExpr = entity.cronExpression ?: return
+                val delay = top.wkbin.tianxuan.core.model.workflow.CronScheduler
+                    .nextOccurrence(cronExpr)?.let { it - System.currentTimeMillis() }?.coerceAtLeast(0L) ?: return
+                val request = OneTimeWorkRequestBuilder<WorkflowScheduleWorker>()
+                    .setInitialDelay(delay, TimeUnit.MILLISECONDS)
+                    .setInputData(inputData)
+                    .addTag(TAG)
+                    .build()
+                workManager.enqueueUniqueWork(uniqueName, ExistingWorkPolicy.REPLACE, request)
+            }
         }
+    }
+
+    /** 距下一个 hour:minute 且在 weekDays 中的工作日的毫秒数。 */
+    private fun nextWeeklyDelayMs(hour: Int, minute: Int, weekDays: List<Int>): Long {
+        val now = System.currentTimeMillis()
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = now
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, minute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        // Calendar 周日=1..周六=7，weekDays 用 1=周一..7=周日
+        // Calendar 日 → weekDays 日：Calendar=1(周日)→weekDays=7, Calendar=2(周一)→weekDays=1
+        fun calDowToWeekDay(calDow: Int): Int = if (calDow == 1) 7 else calDow - 1
+        // 向前扫描最多 7 天
+        for (i in 0..7) {
+            if (calDowToWeekDay(cal.get(Calendar.DAY_OF_WEEK)) in weekDays && cal.timeInMillis > now) {
+                return cal.timeInMillis - now
+            }
+            cal.add(Calendar.DAY_OF_YEAR, 1)
+        }
+        // 兜底：7 天内必中（weekDays 非空）
+        return cal.timeInMillis - now
     }
 
     override fun cancel(scheduleId: String) {

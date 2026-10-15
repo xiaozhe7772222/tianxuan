@@ -102,6 +102,32 @@ class WorkflowScheduleRepository(
                 from + interval * 60_000L
             }
             WorkflowScheduleRepeat.ONCE -> entity.onceAtEpochMillis?.takeIf { it > from }
+            WorkflowScheduleRepeat.WEEKLY -> {
+                val hour = entity.hour ?: return null
+                val minute = entity.minute ?: return null
+                val weekDaysStr = entity.weekDays ?: return null
+                val weekDays = weekDaysStr.split(',').mapNotNull { it.trim().toIntOrNull() }.filter { it in 1..7 }
+                if (weekDays.isEmpty()) return null
+                val cal = Calendar.getInstance().apply {
+                    timeInMillis = from
+                    set(Calendar.HOUR_OF_DAY, hour)
+                    set(Calendar.MINUTE, minute)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                fun calDowToWeekDay(calDow: Int): Int = if (calDow == 1) 7 else calDow - 1
+                for (i in 0..7) {
+                    if (calDowToWeekDay(cal.get(Calendar.DAY_OF_WEEK)) in weekDays && cal.timeInMillis > from) {
+                        return cal.timeInMillis
+                    }
+                    cal.add(Calendar.DAY_OF_YEAR, 1)
+                }
+                cal.timeInMillis
+            }
+            WorkflowScheduleRepeat.CRON -> {
+                val cronExpr = entity.cronExpression ?: return null
+                top.wkbin.tianxuan.core.model.workflow.CronScheduler.nextOccurrence(cronExpr, from)
+            }
         }
 
     fun decodeVariables(variablesJson: String): Map<String, String> =

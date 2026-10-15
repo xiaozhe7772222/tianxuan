@@ -49,6 +49,8 @@ fun scheduleRepeatLabel(entity: WorkflowScheduleEntity): String = when (Workflow
     WorkflowScheduleRepeat.ONCE -> "一次性 · ${
         SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(entity.onceAtEpochMillis ?: 0L))
     }"
+    WorkflowScheduleRepeat.WEEKLY -> "每周 ${entity.weekDays ?: "?"} ${"%02d".format(entity.hour ?: 0)}:${"%02d".format(entity.minute ?: 0)}"
+    WorkflowScheduleRepeat.CRON -> "Cron: ${entity.cronExpression ?: "?"}"
 }
 
 /**
@@ -81,6 +83,8 @@ fun WorkflowScheduleEditDialog(
             }.orEmpty(),
         )
     }
+    var weekDays by remember { mutableStateOf(existing?.weekDays ?: "1,2,3,4,5") }
+    var cronExpression by remember { mutableStateOf(existing?.cronExpression ?: "0 9 * * 1-5") }
     var variablesText by remember { mutableStateOf(formatVariables(existing?.variablesJson)) }
     var workspacePath by remember {
         mutableStateOf(existing?.workspacePath?.ifBlank { "/workspace" } ?: "/workspace")
@@ -113,6 +117,8 @@ fun WorkflowScheduleEditDialog(
                     FilterChip(selected = repeat == WorkflowScheduleRepeat.DAILY, onClick = { repeat = WorkflowScheduleRepeat.DAILY }, label = { Text("每天") })
                     FilterChip(selected = repeat == WorkflowScheduleRepeat.INTERVAL, onClick = { repeat = WorkflowScheduleRepeat.INTERVAL }, label = { Text("周期") })
                     FilterChip(selected = repeat == WorkflowScheduleRepeat.ONCE, onClick = { repeat = WorkflowScheduleRepeat.ONCE }, label = { Text("一次性") })
+                    FilterChip(selected = repeat == WorkflowScheduleRepeat.WEEKLY, onClick = { repeat = WorkflowScheduleRepeat.WEEKLY }, label = { Text("每周") })
+                    FilterChip(selected = repeat == WorkflowScheduleRepeat.CRON, onClick = { repeat = WorkflowScheduleRepeat.CRON }, label = { Text("Cron") })
                 }
                 when (repeat) {
                     WorkflowScheduleRepeat.DAILY -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -132,6 +138,26 @@ fun WorkflowScheduleEditDialog(
                     WorkflowScheduleRepeat.ONCE -> OutlinedTextField(
                         value = onceAt, onValueChange = { onceAt = it },
                         label = { Text("触发时间（yyyy-MM-dd HH:mm）") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    )
+                    WorkflowScheduleRepeat.WEEKLY -> Column {
+                        OutlinedTextField(
+                            value = weekDays, onValueChange = { weekDays = it.filter { c -> c.isDigit() || c == ',' } },
+                            label = { Text("工作日（1=周一..7=周日，逗号分隔，如 1,3,5）") },
+                            singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = hour, onValueChange = { hour = it.filter(Char::isDigit).take(2) },
+                            label = { Text("时(0-23)") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = minute, onValueChange = { minute = it.filter(Char::isDigit).take(2) },
+                            label = { Text("分(0-59)") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    WorkflowScheduleRepeat.CRON -> OutlinedTextField(
+                        value = cronExpression, onValueChange = { cronExpression = it },
+                        label = { Text("Cron 表达式（分 时 日 月 周，如 0 9 * * 1-5）") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 OutlinedTextField(
@@ -166,6 +192,7 @@ fun WorkflowScheduleEditDialog(
                         name = name, workflowId = workflowId, definitions = definitions,
                         repeat = repeat, hour = hour, minute = minute,
                         intervalMinutes = intervalMinutes, onceAt = onceAt,
+                        weekDays = weekDays, cronExpression = cronExpression,
                         variablesText = variablesText, workspacePath = workspacePath, modelId = modelId,
                     )
                     parsed.fold(
@@ -188,6 +215,8 @@ private fun validateAndBuild(
     minute: String,
     intervalMinutes: String,
     onceAt: String,
+    weekDays: String,
+    cronExpression: String,
     variablesText: String,
     workspacePath: String,
     modelId: String,
@@ -224,6 +253,23 @@ private fun validateAndBuild(
             if (target <= now) return Result.failure(IllegalArgumentException("触发时间必须晚于当前时刻"))
             Result.success(buildEntity(existing, name, workflowId, repeat, null, null, null, target, variables, workspacePath, modelId, now))
         }
+        WorkflowScheduleRepeat.WEEKLY -> {
+            val h = hour.toIntOrNull() ?: return Result.failure(IllegalArgumentException("时必须是数字"))
+            val m = minute.toIntOrNull() ?: return Result.failure(IllegalArgumentException("分必须是数字"))
+            if (h !in 0..23 || m !in 0..59) return Result.failure(IllegalArgumentException("时刻超出范围"))
+            val days = weekDays.split(',').mapNotNull { it.trim().toIntOrNull() }.filter { it in 1..7 }
+            if (days.isEmpty()) return Result.failure(IllegalArgumentException("工作日至少一个（1=周一..7=周日，逗号分隔）"))
+            Result.success(buildEntity(existing, name, workflowId, repeat, h, m, null, null, variables, workspacePath, modelId, now, weekDays = days.joinToString(","), cronExpression = null))
+        }
+        WorkflowScheduleRepeat.CRON -> {
+            val expr = cronExpression.trim()
+            if (expr.split(Regex("\\s+")).filter { it.isNotBlank() }.size != 5) {
+                return Result.failure(IllegalArgumentException("Cron 表达式必须是五字段（分 时 日 月 周），如 0 9 * * 1-5"))
+            }
+            val next = top.wkbin.tianxuan.core.model.workflow.CronScheduler.nextOccurrence(expr)
+                ?: return Result.failure(IllegalArgumentException("Cron 表达式无未来匹配"))
+            Result.success(buildEntity(existing, name, workflowId, repeat, null, null, null, null, variables, workspacePath, modelId, now, weekDays = null, cronExpression = expr))
+        }
     }
 }
 
@@ -240,6 +286,8 @@ private fun buildEntity(
     workspacePath: String,
     modelId: String,
     now: Long,
+    weekDays: String? = null,
+    cronExpression: String? = null,
 ): WorkflowScheduleEntity = WorkflowScheduleEntity(
     id = existing?.id ?: "sched_${UUID.randomUUID().toString().take(12)}",
     workflowId = workflowId,
@@ -250,6 +298,8 @@ private fun buildEntity(
     minute = minute,
     intervalMinutes = intervalMinutes,
     onceAtEpochMillis = onceAtEpochMillis,
+    weekDays = weekDays,
+    cronExpression = cronExpression,
     variablesJson = Json.encodeToString(variables),
     workspacePath = workspacePath,
     modelId = modelId.ifBlank { null },
