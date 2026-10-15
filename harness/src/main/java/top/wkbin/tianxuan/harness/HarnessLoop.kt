@@ -95,6 +95,8 @@ class HarnessLoop(
     private val branchSummarizer: BranchSummarizer,
     private val skillEvolutionAdvisor: SkillEvolutionAdvisor? = null,
     private val turnCoordinator: SessionTurnCoordinator,
+    /** 会话投影注册表（对齐 DSH session-projection）：每轮完成后驱动纯折叠投影。 */
+    private val projectionRegistry: top.wkbin.tianxuan.harness.projection.SessionProjectionRegistry? = null,
 ) {
     private val loopScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -1065,6 +1067,29 @@ class HarnessLoop(
                         // 「对话后技能进化」：一轮有效工作结束后异步分析是否值得沉淀新技能 /
                         // 修复既有技能；失败与取消路径不触发，且内部全量容错不影响主对话。
                         skillEvolutionAdvisor?.maybeSuggest(sessId)
+                        // 会话投影驱动（对齐 DSH session-projection）：每轮完成后驱动注册的投影单元。
+                        // 失败与取消路径不驱动——投影是"已完成工作"的只读视图，未完成轮次不产生投影更新。
+                        if (projectionRegistry != null) {
+                            runCatching {
+                                val header = runCatching { sessionDao.findById(sessId) }.getOrNull()
+                                val messages = messageStore.load(sessId)
+                                projectionRegistry?.drive(
+                                    sessId,
+                                    top.wkbin.tianxuan.harness.projection.ProjectionSessionMeta(
+                                        id = sessId,
+                                        createdAt = header?.createdAt ?: System.currentTimeMillis(),
+                                        cwd = header?.workspace,
+                                        parentSessionId = header?.parentSessionId,
+                                        isSeeded = header?.isSeeded ?: false,
+                                        origin = header?.origin,
+                                        delegationDepth = header?.delegationDepth,
+                                    ),
+                                    messages,
+                                )
+                            }.onFailure {
+                                logger.w("Session projection drive failed for $sessId: ${it.message}")
+                            }
+                        }
                     }
                     RunResult.WaitingApproval -> {
                         taskId?.let { agentTaskStateMachine.markWaitingApproval(it) }

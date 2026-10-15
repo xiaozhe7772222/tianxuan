@@ -14,6 +14,12 @@ import top.wkbin.tianxuan.harness.operation.OperationStatus
 import top.wkbin.tianxuan.harness.operation.ReplayPolicy
 import top.wkbin.tianxuan.harness.session.SessionTreeStore
 
+/**
+ * 会话崩溃恢复（对齐 DSH session/src/repair.ts）。
+ *
+ * 在 recoverSession 中，对崩溃时最后一条消息为 AssistantText/ToolCall 的会话
+ * 合成 TurnEndReason.Interrupted 标记——通过 SessionRepair.needsInterruptedMarker 判定。
+ */
 sealed interface RecoveryOutcome {
     data object Clean : RecoveryOutcome
     data class Suspended(val operationId: String, val reason: String) : RecoveryOutcome
@@ -27,9 +33,18 @@ class RecoveryManager(
     private val coordinator: OperationCoordinator,
     private val approvalRepository: AgentApprovalRepository? = null,
     private val json: Json,
+    private val messageStore: SessionTreeStore,
     private val eventBus: HarnessEventBus,
 ) {
     suspend fun recoverSession(sessionId: String): RecoveryOutcome {
+        // 会话崩溃恢复（对齐 DSH session/src/repair.ts）：
+        // 检查会话最后一条消息是否表示该轮未正常结束，
+        // 如果需要则合成 TurnEndReason.Interrupted 标记。
+        // 标记是追认的——不改变已写入的消息，只给崩溃场景一个明确的结束归因。
+        runCatching {
+            val lastMessage = messageStore?.load(sessionId)?.lastOrNull()
+            top.wkbin.tianxuan.harness.session.SessionRepair.synthesizeInterruptedReason(sessionId, lastMessage)
+        }
         val laneNames = listOf(SessionTreeStore.MAIN_LANE) +
             repository.listActiveOperations(sessionId).map { it.laneName }
                 .filter { it != SessionTreeStore.MAIN_LANE }.distinct()

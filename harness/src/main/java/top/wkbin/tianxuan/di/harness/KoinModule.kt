@@ -107,7 +107,12 @@ val harnessModule = module {
 
     single<AgentContextExecutor> { AgentContextExecutor(agentContextDao = get(), json = get()) }
 
-    single<ApprovalPolicyEngine> { ApprovalPolicyEngine(pathResolver = get()) }
+    single<ApprovalPolicyEngine> {
+        ApprovalPolicyEngine(
+            pathResolver = get(),
+            approvalAuditWriter = getOrNull(),
+        )
+    }
 
     single<BuildScriptToolExecutor> { BuildScriptToolExecutor(repository = get()) }
 
@@ -149,6 +154,7 @@ val harnessModule = module {
             branchSummarizer = get(),
             skillEvolutionAdvisor = get(),
             turnCoordinator = get(),
+            projectionRegistry = getOrNull(),
         )
     }
 
@@ -254,6 +260,66 @@ val harnessModule = module {
             settingsDataStore = get(),
             knowledgeManager = getOrNull(),
             goalManager = getOrNull(),
+            repeatToolReminder = getOrNull(),
+            spillPolicy = getOrNull(),
+            ptcDispatchLogger = getOrNull(),
+            skillRegistry = getOrNull(),
+        )
+    }
+
+    // ===== DSH 对齐增强：守卫与注册表 =====
+
+    /** 重复工具调用提醒（对齐 DSH guard/repeat-tool-reminder）：检测连续相同工具+参数调用防死循环。 */
+    single<top.wkbin.tianxuan.harness.guard.RepeatToolReminder> {
+        top.wkbin.tianxuan.harness.guard.RepeatToolReminder()
+    }
+
+    /** Spill token 预算保留（对齐 DSH spill-policy）：超限时保留头尾+间隔标记。 */
+    single<top.wkbin.tianxuan.harness.effects.SpillPolicy> {
+        top.wkbin.tianxuan.harness.effects.SpillPolicy()
+    }
+
+    /** 作业注册表（对齐 DSH jobs）：后台作业生命周期管理。 */
+    single<top.wkbin.tianxuan.harness.jobs.JobRegistry> {
+        top.wkbin.tianxuan.harness.jobs.JobRegistry(eventLogger = getOrNull())
+    }
+
+    /** 会话投影注册表（对齐 DSH session-projection）：状态驱动纯折叠注册表。 */
+    single<top.wkbin.tianxuan.harness.projection.SessionProjectionRegistry> {
+        top.wkbin.tianxuan.harness.projection.SessionProjectionRegistry(json = get()).also { registry ->
+            // 注册内置投影单元（对齐 DSH session-stats / session-turn-outline / plan-mode）
+            registry.register(top.wkbin.tianxuan.harness.projection.SessionStatsProjection)
+            registry.register(top.wkbin.tianxuan.harness.projection.SessionTurnOutlineProjection)
+            registry.register(top.wkbin.tianxuan.harness.projection.PlanModeProjection)
+        }
+    }
+
+    /** 技能提供者注册表（对齐 DSH skill registry）：分层技能来源注册表。 */
+    single<top.wkbin.tianxuan.harness.skill.SkillRegistry> {
+        top.wkbin.tianxuan.harness.skill.SkillRegistry().also { registry ->
+            // 注册文件系统技能提供者（对齐 DSH skill-filesystem）：
+            // 把 AgentSkillRepository 包装为 SkillProvider，使 SkillRegistry
+            // 可以发现和加载来自文件系统的技能（含目录扫描、SKILL.md frontmatter 解析）。
+            runCatching {
+                registry.registerProvider { top.wkbin.tianxuan.harness.skill.SkillFilesystemProvider(repository = get()) }
+            }.onFailure {
+                // 技能提供者注册失败不阻塞装配（仅技能发现降级为旧路径）
+            }
+        }
+    }
+
+    /** 审批审计写入器（对齐 DSH user-approval）：approval/asked + approval/decided 事件。 */
+    single<top.wkbin.tianxuan.harness.events.ApprovalAuditWriter> {
+        top.wkbin.tianxuan.harness.events.ApprovalAuditWriter(eventBus = get())
+    }
+
+    /** PTC 子调度日志写入器（对齐 DSH tool/ptc-dispatch）：记录每个子调用。 */
+    single<top.wkbin.tianxuan.harness.ptc.PtcDispatchLogger> {
+        top.wkbin.tianxuan.harness.ptc.PtcDispatchLogger(
+            eventLogger = getOrNull<top.wkbin.tianxuan.harness.events.AgentEventLogger>() ?: top.wkbin.tianxuan.harness.events.AgentEventLogger(
+                preferences = get(),
+                logger = get(),
+            ),
         )
     }
 
@@ -478,6 +544,7 @@ val harnessModule = module {
             coordinator = get(),
             approvalRepository = get(),
             json = get(),
+            messageStore = get(),
             eventBus = get(),
         )
     }

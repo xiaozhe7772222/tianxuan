@@ -85,8 +85,18 @@ object ToolTimeoutPolicy {
     }
 
     /**
-     * 检查一个工具的调用是否应在超时前被强制终止。
-     * 当前实现仅提供超时值供调用方使用；实际强制终止在调用方实现。
+     * 一个工具的调用是否应在超时前被强制终止。
+     *
+     * 豁免自带超时或原生等待语义的工具，避免双重超时冲突：
+     * - BASE：自带 timeoutSeconds（命令级超时，MAX_BASE_TIMEOUT_SECONDS=900s）
+     * - PROCESS：后台任务（Long.MAX_VALUE 超时 + stop 管理，属合理设计）
+     * - ASK_USER：原生等待用户回答（question TTL 30min 管理）
      */
-    fun shouldEnforce(tool: HarnessTool): Boolean = true
+    fun shouldEnforce(tool: HarnessTool): Boolean = when (tool) {
+        HarnessTool.BASE,
+        HarnessTool.PROCESS,
+        HarnessTool.ASK_USER,
+        -> false
+        else -> true
+    }
 }

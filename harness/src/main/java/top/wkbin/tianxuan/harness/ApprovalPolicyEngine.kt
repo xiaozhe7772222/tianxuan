@@ -20,6 +20,8 @@ data class ApprovalDecision(
 /** Host-side policy. The model prompt is deliberately not part of this decision. */
 class ApprovalPolicyEngine(
     private val pathResolver: HarnessPathResolver,
+    /** 审批审计写入器（对齐 DSH user-approval）：approval/asked + approval/decided 事件。 */
+    private val approvalAuditWriter: top.wkbin.tianxuan.harness.events.ApprovalAuditWriter? = null,
 ) {
     /**
      * 内置 browser server 在工具 API 名里可能出现的 server 段集合：
@@ -221,6 +223,13 @@ class ApprovalPolicyEngine(
         operationId: String? = null,
     ): AgentApprovalRequestEntity {
         val now = System.currentTimeMillis()
+        // 审批审计：记录 approval/asked 事件（对齐 DSH user-approval）
+        approvalAuditWriter?.logAsked(
+            sessionId = sessionId,
+            toolName = toolCall.rawToolName ?: toolCall.tool.name.lowercase(),
+            toolCallId = toolCall.id,
+            reason = decision.reason,
+        )
         return AgentApprovalRequestEntity(
             id = UUID.randomUUID().toString(),
             sessionId = sessionId,

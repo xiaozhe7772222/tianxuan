@@ -90,6 +90,10 @@ class ToolExecutor(
     private val settingsDataStore: AgentPreferences? = null,
     private val knowledgeManager: top.wkbin.tianxuan.harness.knowledge.KnowledgeManager? = null,
     private val goalManager: top.wkbin.tianxuan.harness.goal.GoalManager? = null,
+    private val repeatToolReminder: top.wkbin.tianxuan.harness.guard.RepeatToolReminder? = null,
+    private val spillPolicy: top.wkbin.tianxuan.harness.effects.SpillPolicy? = null,
+    private val ptcDispatchLogger: top.wkbin.tianxuan.harness.ptc.PtcDispatchLogger? = null,
+    private val skillRegistry: top.wkbin.tianxuan.harness.skill.SkillRegistry? = null,
 ) {
     suspend fun execute(
         toolCall: ToolCall,
@@ -101,6 +105,20 @@ class ToolExecutor(
         operationId: String? = null,
     ): ToolResult {
         val now = System.currentTimeMillis()
+
+        // 重复工具调用提醒（对齐 DSH guard/repeat-tool-reminder）：
+        // 检测连续相同工具+参数调用，阈值处注入提醒防止模型死循环。
+        // 在审批/执行之前检查——死循环检测属于安全守卫，不应被审批豁免。
+        repeatToolReminder?.check(sessionId, toolCall.tool, toolCall.args.toString())?.let { reminder ->
+            return ToolResult(
+                id = UUID.randomUUID().toString(),
+                createdAt = now,
+                toolCallId = toolCall.id,
+                success = false,
+                output = reminder,
+            )
+        }
+
         // ask_user 是向用户提问的动作本身，不走审批门控（策略引擎对它亦豁免）：
         // 校验参数 → 落一条 pending 请求（复用审批请求的暂停/恢复管道）→ 返回
         // awaitingApproval 让整轮暂停；UI 渲染问题卡，答案由 HarnessLoop.resolveQuestion
@@ -120,7 +138,7 @@ class ToolExecutor(
             return executeAskUser(toolCall, sessionId, workspace, operationId, now)
         }
         val toolMetadata = mutableMapOf<String, String>()
-        val outcome = try {
+        val outcome = runCatching {
             if (!bypassApproval && sessionId.isNotBlank()) {
                 val repository = approvalRepository
                 // 一次查询同时取审批模式与运行意图（两级：会话级优先，回落全局默认）。
@@ -206,10 +224,23 @@ class ToolExecutor(
                     )
                 }
             }
-            executeTool(toolCall.tool, toolCall.args, toolCall.rawToolName, sessionId, workspace, progressReporter, operationId, toolMetadata)
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (throwable: Throwable) {
+            // 工具调用超时强制（对齐 DSH guard/timeout-policy）：
+            // 对 shouldEnforce=true 的工具用 withTimeout 强制。
+            // 豁免 BASE/PROCESS/ASK_USER（自带超时或原生等待语义）。
+            if (top.wkbin.tianxuan.harness.guard.ToolTimeoutPolicy.shouldEnforce(toolCall.tool)) {
+                val timeoutMs = top.wkbin.tianxuan.harness.guard.ToolTimeoutPolicy.timeoutFor(toolCall.tool)
+                try {
+                    kotlinx.coroutines.withTimeout(timeoutMs) {
+                        executeTool(toolCall.tool, toolCall.args, toolCall.rawToolName, sessionId, workspace, progressReporter, operationId, toolMetadata)
+                    }
+                } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+                    top.wkbin.tianxuan.harness.guard.ToolTimeoutPolicy.timeoutResult(toolCall.tool, timeoutMs)
+                }
+            } else {
+                executeTool(toolCall.tool, toolCall.args, toolCall.rawToolName, sessionId, workspace, progressReporter, operationId, toolMetadata)
+            }
+        }.getOrElse { throwable ->
+            if (throwable is CancellationException) throw throwable
             false to "工具执行异常：${throwable.message ?: throwable::class.simpleName}"
         }
         val (success, rawOutput) = outcome
@@ -228,13 +259,21 @@ class ToolExecutor(
             } ?: true,
         )
         val imagePayload = toolMetadata.remove("image_payload")
+        // Spill token 预算保留（对齐 DSH spill-policy）：
+        // 在截断之前应用——如果输出超长，先按 token 预算保留头尾+间隔标记，
+        // 再走原有 truncateOutput 落盘引流逻辑。两层正交：
+        // SpillPolicy 控制"进入模型上下文的 token 量"，
+        // truncateOutput + ToolOutputSpillStore 控制"工作区落盘上限"。
+        val spillAppliedOutput = spillPolicy?.run {
+            redactedOutput.let { apply(ToolResult(UUID.randomUUID().toString(), now, toolCall.id, success, it)) }
+        }?.output ?: redactedOutput
         return ToolResult(
             id = UUID.randomUUID().toString(),
             createdAt = now,
             toolCallId = toolCall.id,
             success = success,
             output = truncateOutput(
-                redactedOutput,
+                spillAppliedOutput,
                 toolCall.rawToolName ?: HarnessApiMapper.apiName(toolCall.tool),
                 if (workspace.isNotBlank()) fileAccess.withBase(workspace) else null,
             ),
@@ -439,6 +478,19 @@ class ToolExecutor(
                 // 按需技能加载：目录（元数据）常驻系统提示，命中后由模型主动拉取
                 // 完整指导规则，避免全部正文常驻撑爆上下文。
                 val query = requireString(args, "name").trim().trimStart('/')
+
+                // 技能提供者注册表（对齐 DSH skill registry）：优先从 SkillRegistry 查找，
+                // 未命中时回退到 skillRepository（旧路径），保证向后兼容。
+                if (skillRegistry != null) {
+                    val registryMatch = runCatching {
+                        skillRegistry?.get(query, top.wkbin.tianxuan.harness.skill.SkillViewOptions())
+                    }.getOrNull()
+                    if (registryMatch != null) {
+                        return true to "【技能已加载：${registryMatch.summary.name}】（来源：${registryMatch.summary.provider}）\n" +
+                            registryMatch.content.trim()
+                    }
+                }
+
                 val skills = skillRepository?.activeSkills?.first().orEmpty()
                 if (skills.isEmpty()) {
                     false to "当前没有已启用的技能。请提示用户到「设置 → 智能体」启用技能后重试。"
@@ -1749,12 +1801,16 @@ class ToolExecutor(
         if (callsArray.isEmpty()) return true to "batch 为空，无操作执行"
         val results = mutableListOf<String>()
         var allSuccess = true
+        val rootCallId = args["call_id"]?.jsonPrimitive?.contentOrNull ?: "batch-${System.currentTimeMillis()}"
         for ((index, callElem) in callsArray.withIndex()) {
             val callObj = callElem as? JsonObject
                 ?: run { results += "[$index] 无效调用（非对象）"; allSuccess = false; continue }
             val toolName = callObj["tool"]?.jsonPrimitive?.contentOrNull?.trim()
                 ?: run { results += "[$index] 缺少 tool 名称"; allSuccess = false; continue }
             val toolArgs = (callObj["args"] as? JsonObject) ?: JsonObject(emptyMap())
+            // PTC 子调度日志（对齐 DSH tool/ptc-dispatch）：记录每个子调用的开始
+            ptcDispatchLogger?.logDispatchStart(sessionId, rootCallId, index, toolName)
+            val startTime = System.currentTimeMillis()
             val innerResult = execute(
                 ToolCall(
                     id = java.util.UUID.randomUUID().toString(),
@@ -1766,6 +1822,12 @@ class ToolExecutor(
                 sessionId = sessionId,
                 workspace = workspace,
                 allowApprovalRequest = false,
+            )
+            val durationMs = System.currentTimeMillis() - startTime
+            // PTC 子调度日志：记录完成（含耗时/成功/输出摘要）
+            ptcDispatchLogger?.logDispatch(
+                sessionId, rootCallId, index, toolName, toolArgs.toString(),
+                innerResult.success, innerResult.output, durationMs,
             )
             results += "[$index] $toolName: ${if (innerResult.success) "成功" else "失败"} — ${innerResult.output.take(200)}"
             if (!innerResult.success) allSuccess = false

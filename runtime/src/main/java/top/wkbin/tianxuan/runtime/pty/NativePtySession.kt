@@ -29,6 +29,8 @@ class NativePtySession(
     hostEnvironment: Map<String, String>,
     private val config: SessionConfig,
     private val cleanupCallback: suspend () -> Unit = {},
+    /** 就绪追踪配置；null 使用默认值。 */
+    readinessConfig: PtyReadinessTracker.ReadinessConfig = PtyReadinessTracker.ReadinessConfig(),
 ) : LinuxSession {
 
     private val pair: IntArray = NativePty.openAndExec(
@@ -40,6 +42,12 @@ class NativePtySession(
     )
     private val masterFd: Int = pair[0]
     private val childPid: Int = pair[1]
+
+    // PTY readiness 协议（对齐 DSH terminal-bash）：流式净化 + 就绪追踪。
+    // TerminalSanitizer 剥离 CSI/OSC 转义并检测 OSC 133;D prompt 标记；
+    // PtyReadinessTracker 通过标记+提示语+前台进程组判定 shell 就绪状态。
+    private val sanitizer = TerminalSanitizer()
+    private val readinessTracker = PtyReadinessTracker(readinessConfig)
 
     private val outputChannel = Channel<TerminalOutput>(OUTPUT_BUFFER_CAPACITY)
     private val closed = AtomicBoolean(false)
@@ -53,9 +61,14 @@ class NativePtySession(
                 val n = NativePty.readFd(masterFd, buffer)
                 if (n < 0) break
                 if (n > 0) {
-                    val text = decodeUtf8(buffer, n)
-                    if (text.isNotEmpty()) {
-                        outputChannel.send(TerminalOutput(TerminalStream.STDOUT, text))
+                    val rawText = decodeUtf8(buffer, n)
+                    if (rawText.isNotEmpty()) {
+                        // 流式净化：剥离 CSI/OSC 转义，检测 prompt 标记
+                        val sanitized = sanitizer.push(rawText)
+                        readinessTracker.onData(sanitized)
+                        if (sanitized.text.isNotEmpty()) {
+                            outputChannel.send(TerminalOutput(TerminalStream.STDOUT, sanitized.text))
+                        }
                     }
                 }
             }
@@ -103,6 +116,27 @@ class NativePtySession(
     }
 
     override suspend fun interrupt() = write(byteArrayOf(3))
+
+    /**
+     * 查询当前 shell 就绪状态（对齐 DSH terminal-bash readiness）。
+     *
+     * 供 Agent/工具调用方判断 shell 是否已回到提示符（可接收新命令）。
+     * 返回值 null 表示尚未就绪或无法判定。
+     */
+    fun readinessState(): PtyReadinessTracker.WaitReason? {
+        return readinessTracker.poll(
+            foreground = null, // 前台进程组状态暂不支持（需要额外的 /proc 查询）
+            scrollbackHasOutput = true,
+            sessionStatus = if (closed.get()) PtyReadinessTracker.SessionStatus.EXITED else PtyReadinessTracker.SessionStatus.RUNNING,
+        )
+    }
+
+    /**
+     * 重置就绪追踪（开始新命令时调用）。
+     */
+    fun resetReadiness() {
+        readinessTracker.reset()
+    }
 
     override suspend fun close() = withContext(Dispatchers.IO) {
         if (closed.compareAndSet(false, true)) {

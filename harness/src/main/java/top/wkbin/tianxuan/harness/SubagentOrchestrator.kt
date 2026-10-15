@@ -81,18 +81,32 @@ class SubagentOrchestrator(
         if (specs.isEmpty()) {
             return@withContext false to "未解析到有效的 subagents 任务列表，请检查参数"
         }
+
+        // 委派深度递归预算（对齐 DSH SessionHeader.delegationDepth）：
+        // 从父会话的持久化 delegationDepth 读取当前深度，超过预算拒绝创建子代理，
+        // 防止递归子代理无限深递导致资源耗尽。
+        val parentDepth = sessionDao.findById(parentSessionId)?.delegationDepth
+        if (!top.wkbin.tianxuan.harness.session.DelegationDepthGuard.canDelegate(parentDepth)) {
+            val current = parentDepth ?: 0
+            return@withContext false to
+                "已达到最大委派深度（当前 $current，上限 ${top.wkbin.tianxuan.harness.session.DelegationDepthGuard.MAX_DELEGATION_DEPTH}）。" +
+                "递归子代理会耗尽资源，本次没有启动任何子任务。请在当前会话内直接完成任务，或把结果汇总给上层智能体。"
+        }
+        val childDepth = top.wkbin.tianxuan.harness.session.DelegationDepthGuard.childDepth(parentDepth)
+
         val background = args["background"]?.jsonPrimitive?.booleanOrNull == true
         if (background) {
             return@withContext false to
                 "background=true 暂不可用：移动端后台子任务尚未接入持久批次恢复与前台服务保活。" +
                 "为避免应用退后台后任务静默丢失，本次没有启动任何子任务；请移除 background 并以前台模式重试。"
         }
-        runBatch(specs, parentSessionId)
+        runBatch(specs, parentSessionId, childDepth)
     }
 
     private suspend fun runBatch(
         specs: List<SubagentTaskSpec>,
         parentSessionId: String,
+        childDelegationDepth: Int? = null,
     ): Pair<Boolean, String> {
         return supervisorScope {
         val parentSession = sessionDao.findById(parentSessionId)
