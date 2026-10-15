@@ -3,6 +3,8 @@ package top.wkbin.tianxuan.harness.compaction
 import kotlinx.serialization.Serializable
 import top.wkbin.tianxuan.harness.HarnessMessage
 import top.wkbin.tianxuan.harness.ToolCallMode
+import top.wkbin.tianxuan.harness.session.SurfaceOp
+import top.wkbin.tianxuan.harness.session.TurnEndReason
 
 @Serializable
 data class CompactionPayload(
@@ -32,6 +34,26 @@ data class CompactionPayload(
      * 与反序列化时十几兆连续 char[] 缓冲区的暴增，根治移动端 Dalvik OOM。
      */
     val retainedMessages: List<HarnessMessage>? = null,
+    /**
+     * 压缩在模型可见 surface 上的操作方式（对齐 DSH SurfaceOp）。
+     *
+     * - [SurfaceOp.Append]：摘要以新节点追加到 surface 尾部，历史消息保留原位——
+     *   适用于「只折叠早期、不重写近期」的场景。
+     * - [SurfaceOp.Replace]：摘要以单个节点替换 surface 上 [SurfaceOp.Replace.startSeq] 至
+     *   [SurfaceOp.Replace.endSeq] 的既有消息——原子地替换一整段模型可见历史。
+     *
+     * null = 旧格式 payload，无 surface 归因（向后兼容）。
+     */
+    val surfaceOp: SurfaceOp? = null,
+    /**
+     * 触发压缩的轮次的结束原因（对齐 DSH TurnEndReason）。
+     *
+     * 压缩可能因「轮次正常完成」「token 上限」「用户中断」等原因触发；
+     * 持久化该原因使恢复与回溯可精确区分压缩时的会话状态。
+     *
+     * null = 旧格式 payload，无轮次归因（向后兼容）。
+     */
+    val turnEndReason: TurnEndReason? = null,
 )
 
 data class CompactedContext(

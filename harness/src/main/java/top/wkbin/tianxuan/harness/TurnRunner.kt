@@ -1,6 +1,8 @@
 package top.wkbin.tianxuan.harness
 
 
+import top.wkbin.tianxuan.harness.session.TurnEndReason
+
 sealed interface TurnProviderOutcome {
     data class Success(val result: ChatResult, val streamText: String) : TurnProviderOutcome
     data class Failed(val message: String) : TurnProviderOutcome
@@ -24,6 +26,22 @@ sealed interface TurnOutcome {
     ) : TurnOutcome
 
     data class Failed(val message: String) : TurnOutcome
+}
+
+/**
+ * 将运行时 [TurnOutcome] 映射为持久化 [TurnEndReason]（对齐 DSH TurnEndReasonMap）。
+ *
+ * 调用方在 TurnRunner.run() 返回后调用此扩展，把轮次结束归因写入会话日志；
+ * 旧调用方不调用也不影响功能——TurnEndReason 仅增强可观测性，不改变执行路径。
+ */
+fun TurnOutcome.toTurnEndReason(): TurnEndReason = when (this) {
+    is TurnOutcome.Complete -> TurnEndReason.Completed
+    is TurnOutcome.Continue -> TurnEndReason.Completed
+    is TurnOutcome.RoundLimit -> TurnEndReason.MaxTokens
+    is TurnOutcome.Failed -> TurnEndReason.Error(
+        errorCode = "TURN_FAILED",
+        errorMessage = this.message,
+    )
 }
 
 /**
