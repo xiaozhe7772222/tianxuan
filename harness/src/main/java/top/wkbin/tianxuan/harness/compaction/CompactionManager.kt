@@ -15,6 +15,9 @@ import top.wkbin.tianxuan.harness.HarnessMessage
 import top.wkbin.tianxuan.harness.ModelConfig
 import top.wkbin.tianxuan.harness.UserMessage
 import top.wkbin.tianxuan.harness.session.SessionTreeStore
+import top.wkbin.tianxuan.harness.session.SurfaceOp
+import top.wkbin.tianxuan.harness.session.TurnEndReason
+import top.wkbin.tianxuan.harness.TurnOutcome
 
 /** compress 锚点解析结果。 */
 sealed interface CompressAnchorResult {
@@ -155,11 +158,28 @@ class CompactionManager(
         laneName: String = SessionTreeStore.MAIN_LANE,
         model: ModelConfig? = null,
         summaryContext: SummaryRequestContext? = null,
+        /**
+         * 触发本次压缩的轮次的结束原因（对齐 DSH TurnEndReason）。
+         * 由调用方在压缩前传入当前 TurnOutcome 的映射；null 表示无归因。
+         */
+        turnEndReason: TurnEndReason? = null,
     ): CompactedContext {
-        require(keepFromIndex in 1..context.messages.size) { "Compaction must remove at least one message" }
+        // 工具配对平衡（对齐 DSH compaction/src/tool-pairing.ts）：
+        // keepFromIndex 必须落在平衡切口上——切口前的所有 tool_call 都有对应 tool_result。
+        // 不平衡的切口会留下悬空调用（模型看到 tool_call 但看不到结果），
+        // 导致下一轮模型重复调用同一工具。
+        val balancedIndex = ToolPairingBalance.findBalancedCut(context.messages, keepFromIndex)
+        if (balancedIndex != keepFromIndex) {
+            Log.d(
+                "ContextCompaction",
+                "工具配对平衡调整：keepFromIndex $keepFromIndex -> $balancedIndex",
+            )
+        }
+        val effectiveKeepFromIndex = balancedIndex
+        require(effectiveKeepFromIndex in 1..context.messages.size) { "Compaction must remove at least one message" }
         // 摘要在锁外生成：前缀对账通过时锁内重读的折叠段与调用方快照完全一致，摘要输入不变；
         // 不能持 laneLock 跨 LLM 调用——否则分支切换/消息追加会被阻塞整个摘要时长。
-        val collapsedForSummary = context.messages.take(keepFromIndex)
+        val collapsedForSummary = context.messages.take(effectiveKeepFromIndex)
         // 上一份摘要层（压缩摘要 + 尚未折叠的分支摘要）作为迭代上下文传入 LLM，
         // 天然实现滚动合并；LLM 不可用时机械摘要 + 字符串拼接兜底。
         val previousSummaries = buildList {
@@ -222,8 +242,8 @@ class CompactionManager(
                 return@withLaneLock fresh
             }
             val lane = repository.ensureLane(sessionId, laneName)
-            val collapsed = fresh.messages.take(keepFromIndex)
-            val retained = fresh.messages.drop(keepFromIndex)
+            val collapsed = fresh.messages.take(effectiveKeepFromIndex)
+            val retained = fresh.messages.drop(effectiveKeepFromIndex)
             val now = System.currentTimeMillis()
             val previousFoldedCount = repository.latestBranchEntryOfType(sessionId, lane.leafId, ENTRY_TYPE)
                 ?.let { entry ->
@@ -242,6 +262,11 @@ class CompactionManager(
                 estimatedTokensBefore = fresh.messages.sumOf(::messageTokens),
                 createdAt = now,
                 sourceWatermarkSequence = fresh.sourceMaxSequence,
+                surfaceOp = SurfaceOp.Replace(
+                    startSeq = collapsed.firstOrNull()?.id?.hashCode()?.toLong() ?: 0L,
+                    endSeq = collapsed.lastOrNull()?.id?.hashCode()?.toLong() ?: 0L,
+                ),
+                turnEndReason = turnEndReason,
             )
             val entry = HarnessEntryEntity(
                 id = UUID.randomUUID().toString(),
