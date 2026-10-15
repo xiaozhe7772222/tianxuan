@@ -63,6 +63,7 @@ class SubagentOrchestrator(
     private val fileAccess: WorkspaceFileAccess,
     private val providerClient: ProviderClient,
     private val logger: AppLogger,
+    private val subagentTaskDao: top.wkbin.tianxuan.core.database.SubagentTaskDao,
 ) {
     /**
      * Application-wide budget: a three-agent fan-out should actually run three lanes at once,
@@ -254,6 +255,24 @@ class SubagentOrchestrator(
             profile = resolved
             laneName = "subagent:${profile.id}:${java.util.UUID.randomUUID()}"
             laneManager.create(parentSessionId, laneName, parentLeaf)
+            // 持久化子代理任务（对齐 DSH subagent descriptor）：进程被杀后可从 Room
+            // 识别 running 状态任务并恢复，而非依赖内存 LaneManager 丢失后无法续跑。
+            runCatching {
+                subagentTaskDao.upsert(
+                    top.wkbin.tianxuan.core.database.SubagentTaskEntity(
+                        id = laneName,
+                        sessionId = parentSessionId,
+                        laneName = laneName,
+                        taskName = spec.taskName,
+                        status = "running",
+                        description = spec.prompt.take(500),
+                        profileId = profile.id,
+                        modelId = modelId,
+                        modelVariant = modelVariant,
+                        currentStep = 0,
+                    ),
+                )
+            }
         }
         val readOnlyWriteIntent = spec.writePaths.isEmpty() && declaresWriteIntent(spec.prompt)
         val prompt = if (resumeLaneName != null) {
@@ -365,6 +384,16 @@ class SubagentOrchestrator(
                     claimAdjudication = adjudication,
                 )
             }
+        }
+        // 子代理任务完成时更新持久化状态（对齐 DSH durable descriptor 结算）
+        runCatching {
+            subagentTaskDao.updateStatus(
+                taskId = laneName,
+                status = if (outcome.isSuccess) "completed" else "failed",
+                currentStep = outcome.toolCallCount,
+                errorMessage = if (!outcome.isSuccess) outcome.summary.take(500) else null,
+                updatedAt = System.currentTimeMillis(),
+            )
         }
         return outcome
     }

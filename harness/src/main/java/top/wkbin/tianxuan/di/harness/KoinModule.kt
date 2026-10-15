@@ -3,6 +3,7 @@ package top.wkbin.tianxuan.di.harness
 import org.koin.dsl.module
 import android.content.Context
 import java.io.File
+import top.wkbin.tianxuan.core.database.AppDatabase
 import top.wkbin.tianxuan.harness.AgentContextExecutor
 import top.wkbin.tianxuan.harness.ApprovalPolicyEngine
 import top.wkbin.tianxuan.harness.BuildScriptToolExecutor
@@ -208,6 +209,7 @@ val harnessModule = module {
             laneManager = get(),
             laneRunner = get(),
             subagentRepository = get(),
+            subagentTaskDao = get(),
             promptAssets = get(),
             agentContextRepo = get(),
             fileAccess = get(),
@@ -510,6 +512,8 @@ val harnessModule = module {
     }
 
     single<GoalManager> { GoalManager() }
+
+    single<top.wkbin.tianxuan.core.database.SubagentTaskDao> { get<AppDatabase>().subagentTaskDao() }
 
     single<LaneManager> { LaneManager(repository = get(), treeStore = get()) }
 

@@ -27,6 +27,9 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
 
+    // SubagentOrchestrator 使用 AppDatabase (RoomDatabase) 创建 DAO，需要 room-runtime 在 classpath
+    implementation(libs.androidx.room.runtime)
+
     testImplementation(libs.bundles.test.robolectric)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.kotlinx.coroutines.core)
