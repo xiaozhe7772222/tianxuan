@@ -25,15 +25,31 @@ class LinuxMcpStdioChannelFactory(
         if (!awaitLinuxRuntimeReady(linuxRuntime.state)) {
             throw IllegalStateException("Linux runtime is not ready. Call initialize() first.")
         }
+        // 环境清洗（对齐 DeepSeek Harness mcp-client/transport.ts 的 scrubbedParentEnv）：
+        // 从 server.env 中剥离凭据-shaped 变量（OPENAI_API_KEY / ANTHROPIC_API_KEY 等），
+        // 防止用户 API Key 泄漏到第三方 MCP server 子进程。
+        val cleanedEnv = server.env.toMutableMap()
+        SECRET_ENV_PATTERNS.forEach { pattern ->
+            cleanedEnv.keys.filter { pattern.matches(it) }.forEach { cleanedEnv.remove(it) }
+        }
         val session = linuxRuntime.startSession(
             SessionConfig(
                 workingDirectory = "/root",
-                environment = server.env,
+                environment = cleanedEnv,
                 commandLine = commandBuilder.commandLine(server),
                 allowSttyResize = false,
             ),
         )
         return LinuxMcpStdioChannel(server.id, session)
+    }
+
+    private companion object {
+        /** 凭据-shaped 变量名正则：API Key / Token / Password / Secret 等 */
+        private val SECRET_ENV_PATTERNS = listOf(
+            Regex("(?i).*(API_KEY|APIKEY|TOKEN|PASSWORD|PASSWD|SECRET|CREDENTIAL).*"),
+            Regex("(?i)^(OPENAI|ANTHROPIC|GEMINI|DEEPSEEK|OPENROUTER|GROQ|MISTRAL|TOGETHER|NVIDIA|XAI|SILICONFLOW|MOONSHOT|MINIMAX|ZHIPU|DOUBAO|QWEN)_.*"),
+            Regex("(?i)^(TIANXUAN_BASE_URL|TIANXUAN_MODEL|MCAI_.*|OPEN_CODE_.*).*"),
+        )
     }
 }
 
