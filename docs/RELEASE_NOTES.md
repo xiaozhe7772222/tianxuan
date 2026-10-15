@@ -1,3 +1,58 @@
+# 天玄 · TianXuan v0.36.0 发布记录
+
+> **发布时间**：2026-10-15  
+> **版本号**：v0.36.0（`appVersionName = 0.36.0`，`appVersionCode = 48`）  
+> **支持范围**：Android 10+ · arm64-v8a（无 Root / PRoot 沙箱）  
+> **性质**：全部 DSH 增强真实接入运行链路 — 从死代码到生效
+
+---
+
+## 🎉 版本亮点
+
+v0.36.0 是本项目的关键转折点：此前 v0.30–v0.35 定义的 19 项 DSH 对齐增强中，大部分只是"类型已定义、编译已通过"，但从未被实例化或调用（死代码）。本版本将全部增强真实接入运行链路，每一项都在实际执行路径中生效。
+
+### 接线总览（全部真实生效）
+
+| 增强项 | 接入点 |
+|--------|--------|
+| RepeatToolReminder | ToolExecutor.execute() 前置检查，防模型死循环 |
+| ToolTimeoutPolicy | ToolExecutor.execute() withTimeout 强制，豁免 BASE/PROCESS/ASK_USER |
+| SpillPolicy | ToolExecutor 返回前 token 预算截断 |
+| DelegationDepthGuard | SubagentOrchestrator.executeSubagents() 递归深度强制（MAX_DELEGATION_DEPTH=5） |
+| SessionRepair | RecoveryManager.recoverSession() 崩溃恢复标记 |
+| ApprovalAuditWriter | ApprovalPolicyEngine.createRequest() 审批审计事件 |
+| PtcDispatchLogger | ToolExecutor.executeBatch() 子调度日志 |
+| SkillRegistry | ToolExecutor.LOAD_SKILL 提供者注册表查找 |
+| SkillFilesystemProvider | SkillRegistry.registerProvider() 文件系统技能发现 |
+| SessionProjectionRegistry | HarnessLoop.executeSessionRun() Completed 驱动 |
+| SessionStatsProjection | SessionProjectionRegistry 注册 |
+| SessionTurnOutlineProjection | SessionProjectionRegistry 注册 |
+| PlanModeProjection | SessionProjectionRegistry 注册 |
+| PtyReadinessTracker | NativePtySession 数据读取路径 + readinessState()/resetReadiness() API |
+| TerminalSanitizer | NativePtySession 数据读取路径 |
+| TurnEndReason | TurnRunner.toTurnEndReason() 扩展 |
+| SurfaceOp | CompactionManager.compact() payload |
+| ToolPairingBalance | CompactionManager.compact() 切口平衡 |
+| JobRegistry | Koin 单例注册 |
+
+### Koin 装配
+全部新增组件注册为单例：RepeatToolReminder / SpillPolicy / JobRegistry /
+SessionProjectionRegistry / SkillRegistry / ApprovalAuditWriter / PtcDispatchLogger。
+
+### 关键修复
+- RecoveryManager 构造器新增 messageStore: SessionTreeStore（SessionRepair 依赖）
+- ToolTimeoutPolicy.shouldEnforce() 豁免自带超时工具，避免双重超时冲突
+- execute() 审批逻辑保留原样，awaitingApproval / approvalDeferred 字段不丢失
+
+---
+
+## ⬆️ 升级说明
+
+- 覆盖安装即可，无需清空数据；
+- 从 v0.34.0 起 DB schema 已升级到 57（会话谱系字段），自动迁移。
+
+---
+
 # 天玄 · TianXuan v0.35.0 发布记录
 
 > **发布时间**：2026-10-15  

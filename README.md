@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <code>v0.35.0</code> · <code>Android 10+ (API 29+)</code> · <code>arm64-v8a</code> · <code>Kotlin 2.4.10</code> · <code>Jetpack Compose</code>
+  <code>v0.36.0</code> · <code>Android 10+ (API 29+)</code> · <code>arm64-v8a</code> · <code>Kotlin 2.4.10</code> · <code>Jetpack Compose</code>
 </p>
 
 <p align="center">
@@ -71,7 +71,7 @@
 | **无线 ADB 与宿主自动化** | mDNS 发现、通知栏配对码输入、Android / PRoot 日志、设备体检与 Intent 诊断；经用户授权后，可通过无线 ADB、Shizuku、Root 或无障碍通道执行不同级别的宿主与 GUI 自动化。 |
 | **端侧协作** | 提供全局悬浮助手、带临时 PIN 的局域网 WebChat、FTP 文件传输，以及 FGS、WakeLock 与 Wi-Fi Lock 长任务保活能力。 |
 
-> 当前版本 v0.35.0 已完成 DeepSeek Harness 全核心机制对齐（33 项增强），涵盖会话事件日志、谱系追踪、压缩安全、投影系统、PTY readiness、技能注册表、PTC 运行时、守卫策略、作业注册表、审批审计等。稳定版功能与安装包请以 [Releases](https://github.com/xiaozhe7772222/tianxuan/releases) 页面为准。
+> 当前版本 v0.36.0 已完成 DeepSeek Harness 全核心机制对齐（33 项增强），涵盖会话事件日志、谱系追踪、压缩安全、投影系统、PTY readiness、技能注册表、PTC 运行时、守卫策略、作业注册表、审批审计等。全部增强已真实接入运行链路（从 v0.36.0 起经 Koin 装配并在 HarnessLoop / ToolExecutor / SubagentOrchestrator / ApprovalPolicyEngine / NativePtySession 等执行路径生效）。稳定版功能与安装包请以 [Releases](https://github.com/xiaozhe7772222/tianxuan/releases) 页面为准。
 
 ---
 
@@ -199,7 +199,7 @@ export JAVA_HOME="/path/to/jdk-17"
 Debug APK 默认输出到：
 
 ```text
-app/build/outputs/apk/debug/tianxuan-v0.35.0-debug.apk
+app/build/outputs/apk/debug/tianxuan-v0.36.0-debug.apk
 ```
 
 ### 可选步骤
