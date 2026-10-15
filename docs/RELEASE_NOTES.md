@@ -1,3 +1,77 @@
+# 天玄 · TianXuan v0.35.0 发布记录
+
+> **发布时间**：2026-10-15  
+> **版本号**：v0.35.0（`appVersionName = 0.35.0`，`appVersionCode = 47`）  
+> **支持范围**：Android 10+ · arm64-v8a（无 Root / PRoot 沙箱）  
+> **性质**：DeepSeek Harness 全核心机制对齐 — 33 项增强
+
+---
+
+## 🎉 版本亮点
+
+v0.35.0 完成了 DeepSeek Harness (DSH) 全核心架构机制的对齐增强，从 v0.22.0 到 v0.35.0 共发布 14 个版本，累计 33 项 DSH 对齐增强，涵盖会话事件日志、压缩安全、投影系统、PTY readiness、技能注册表、PTC 运行时、守卫策略、作业注册表、审批审计等全部核心机制。
+
+### DSH 对齐增强总览（33 项）
+
+#### 会话事件日志与谱系（v0.31–v0.32）
+- TurnEndReason 七态归因（Completed/Aborted/Blocked/Error/MaxTokens/Interrupted/Forked）
+- SurfaceOp append/replace（压缩在 surface 上的原子操作）
+- Session lineage trace（DB schema 57：parentSessionId/isSeeded/origin/delegationDepth）
+- Session Repair（崩溃恢复合成 TurnEndReason.Interrupted）
+
+#### 压缩安全（v0.34）
+- ToolPairingBalance：压缩切口平衡检测，防止切口落在 tool_call/result 之间
+- CompactionManager surfaceOp + turnEndReason 接线
+- 摘要收敛校验：LLM 摘要不得比被折叠段更长
+
+#### 会话投影系统（v0.34）
+- SessionProjectionRegistry：状态驱动纯折叠注册表
+- SessionStatsProjection：全日志统计（轮次/步数/工具调用/token 估算）
+- SessionTurnOutlineProjection：轮次大纲折叠（prompt/response 预览）
+- PlanModeProjection：计划模式状态投影
+
+#### PTY readiness 协议（v0.33）
+- TerminalSanitizer：流式 CSI/OSC 转义净化器
+- BoundedTextBuffer：有界输出缓冲（字节+行数双上限）
+- PtyReadinessTracker：三级证据链就绪判定
+- PromptMarker：OSC 133;D 标记 + bash 环境变量模板
+
+#### 技能系统（v0.30, v0.33, v0.34）
+- 技能 catalog 摘要缓存
+- SkillProvider 接口 + SkillRegistry 分层注册表
+- SkillFilesystemProvider：AgentSkillRepository 包装为 SkillProvider
+- renderSkillContent：<skill_content> 模型可见标准化格式
+
+#### PTC 运行时（v0.33, v0.34）
+- PtcRuntime 接口 + PtcRunResult/PtcRunFailure 类型系统
+- PtcDispatcher：并发子调用调度（PARALLEL/EXCLUSIVE + 有序提交）
+- JsonPtcRuntime：JSON 工具调用序列程序格式实现
+- PtcDispatchLogger：子调度日志写入会话事件流
+
+#### 守卫策略（v0.35）
+- RepeatToolReminder：连续相同工具+参数调用检测，阈值 [3,5,8] 注入提醒
+- ToolTimeoutPolicy：每工具超时强制表（31 个工具全覆盖），TOOL_TIMEOUT 错误码
+
+#### 作业与审批（v0.35）
+- JobRegistry：后台作业生命周期管理（注册/结算/终止/查询）
+- ApprovalAuditEvent：approval/asked + approval/decided 结构化审计事件
+
+#### 其他增强（v0.22–v0.29）
+- Retention sealed 类型、文件版本守卫、warn-then-block 重复检测
+- 子代理任务持久化冷恢复、CommandResult timedOut/aborted 互斥
+- Cron/Weekly 调度、MCP 子进程环境清洗、输出双段保留
+- 文件效果三级沙箱、batch 工具、MCP 图片 content block 处理
+- chroot（ROOT 模式）、品牌清理、LeakCanary 修复
+
+---
+
+## ⬆️ 升级说明
+
+- 覆盖安装即可，无需清空数据；
+- DB schema 从 56 升级到 57（新增会话谱系字段），自动迁移。
+
+---
+
 # 天玄 · TianXuan v0.19.1 发布记录
 
 > **发布时间**：2026-09-28  

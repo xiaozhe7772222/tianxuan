@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <code>v0.11.0</code> · <code>Android 10+ (SDK 29+)</code> · <code>arm64-v8a</code> · <code>Kotlin 2.4</code> · <code>Jetpack Compose</code>
+  <code>v0.35.0</code> · <code>Android 10+ (SDK 29+)</code> · <code>arm64-v8a</code> · <code>Kotlin 2.4.10</code> · <code>Jetpack Compose</code>
 </p>
 
 <p align="center">
@@ -92,7 +92,7 @@ $env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
 .\gradlew.bat assembleDebug --console=plain
 ```
 
-Debug APK output: `app/build/outputs/apk/debug/tianxuan-v0.11.0-debug.apk`
+Debug APK output: `app/build/outputs/apk/debug/tianxuan-v0.35.0-debug.apk`
 
 > 📦 **TianXuanDev Dual-Package Build**: Set `$env:TIANXUAN_DEV_BUILD="1"` in CI or local environment to build the preview APK `top.wkbin.tianxuan.dev`, which can be installed side-by-side with the release package.
 

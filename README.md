@@ -11,12 +11,12 @@
 </p>
 
 <p align="center">
-  <code>v0.15.1 stable</code> · <code>Android 10+ (API 29+)</code> · <code>arm64-v8a</code> · <code>Kotlin 2.4.10</code> · <code>Jetpack Compose</code>
+  <code>v0.35.0</code> · <code>Android 10+ (API 29+)</code> · <code>arm64-v8a</code> · <code>Kotlin 2.4.10</code> · <code>Jetpack Compose</code>
 </p>
 
 <p align="center">
-  <a href="https://github.com/wkbin/tianxuan/releases">Releases</a> ·
-  <a href="https://github.com/wkbin/tianxuan/issues">Issues</a> ·
+  <a href="https://github.com/xiaozhe7772222/tianxuan/releases">Releases</a> ·
+  <a href="https://github.com/xiaozhe7772222/tianxuan/issues">Issues</a> ·
   <strong>简体中文</strong> · <a href="README_EN.md">English</a>
 </p>
 
@@ -59,11 +59,11 @@
 | 领域 | 能力概览 |
 | :--- | :--- |
 | **Linux Runtime** | 基于 **PRoot** 在无 Root Android 上运行 ARM64 Linux；从 OCI Registry 安装并校验 RootFS，支持多发行版共存、切换、回滚、持久化目录绑定与 Android 共享存储挂载。 |
-| **Agent Harness** | 支持 OpenAI-compatible Chat Completions、OpenAI Responses API 与 Anthropic Messages API；统一处理流式正文、reasoning、函数工具调用、视觉输入、token usage 与上下文压缩。 |
-| **可靠性与恢复** | 持久化会话、任务计划、语义记忆、自动/手动上下文压缩、大工具输出落盘，以及中断后的恢复；支持 SessionFork 对话回退、文件 checkpoint、外部修改冲突检测与最近一次 rewind 撤销。 |
-| **子智能体协作** | 支持多子智能体调度、结构化结果裁定、token 预算、写路径租约和超限结果分页落盘，降低并行写入冲突与上下文膨胀。 |
+| **Agent Harness** | 支持 OpenAI-compatible Chat Completions、OpenAI Responses API 与 Anthropic Messages API；统一处理流式正文、reasoning、函数工具调用、视觉输入、token usage 与上下文压缩。**DSH 对齐增强**：会话投影注册表（Stats/TurnOutline/PlanMode）、压缩 tool-pairing 平衡、Spill token 预算保留、技能 Provider 注册表、完整 PTC（并发子调度+有序提交）、重复工具调用提醒、每工具超时强制、作业注册表、审批审计事件。 |
+| **可靠性与恢复** | 持久化会话、任务计划、语义记忆、自动/手动上下文压缩、大工具输出落盘，以及中断后的恢复；支持 SessionFork 对话回退、文件 checkpoint、外部修改冲突检测与最近一次 rewind 撤销。**DSH 对齐增强**：TurnEndReason 七态归因、SurfaceOp append/replace、会话谱系追踪（DB schema 57）、崩溃恢复合成 Interrupted 标记、委派深度递归预算。 |
+| **子智能体协作** | 支持多子智能体调度、结构化结果裁定、token 预算、写路径租约和超限结果分页落盘，降低并行写入冲突与上下文膨胀。**DSH 对齐增强**：子代理任务持久化冷恢复、递归深度强制（MAX_DELEGATION_DEPTH=5）。 |
 | **可视化工作流** | 持久化 Kotlin DAG、条件边与并行节点；可组合 Bash、后台进程、Agent、Subagent、构建、宿主动作和人工审批，并支持运行历史、后台执行、通知审批及 WorkManager 一次性/间隔/每日计划。 |
-| **原生 PTY 终端** | JNI 后端通过 `openpty + fork + setsid + TIOCSCTTY + execve` 创建真实控制终端，产物为 `libpty_native.so`；配合 Termux terminal-emulator / TerminalView 支持作业控制、Ctrl+C、窗口尺寸变化和多会话，原生后端不可用时回退至 `script` 通道。 |
+| **原生 PTY 终端** | JNI 后端通过 `openpty + fork + setsid + TIOCSCTTY + execve` 创建真实控制终端，产物为 `libpty_native.so`；配合 Termux terminal-emulator / TerminalView 支持作业控制、Ctrl+C、窗口尺寸变化和多会话，原生后端不可用时回退至 `script` 通道。**DSH 对齐增强**：PTY readiness 协议（OSC 133;D 标记）、TerminalSanitizer 流式净化、BoundedTextBuffer 有界缓冲、PtyReadinessTracker 三级证据链就绪判定。 |
 | **移动工作区与构建** | 创建空项目、导入本地 ZIP（含 Zip Slip 防护）或克隆 GitHub 仓库；提供代码树、行级 Diff、沙箱内 Gradle / Flutter 后台构建、APK 签名与安装。 |
 | **端侧 Git 工作台** | 基于 JGit 直接管理宿主工作区，支持改动、暂存、提交、分支、提交图、标签、push/pull、推送预览、AI 提交说明与加密 HTTPS Token。 |
 | **浏览器与 Web 自动化** | 内置多 Tab WebView 池与 Browser MCP；支持页面 Hook、CDP 断点、Worker 级 Fetch 拦截、网络时间线与调试状态展示。 |
@@ -71,7 +71,7 @@
 | **无线 ADB 与宿主自动化** | mDNS 发现、通知栏配对码输入、Android / PRoot 日志、设备体检与 Intent 诊断；经用户授权后，可通过无线 ADB、Shizuku、Root 或无障碍通道执行不同级别的宿主与 GUI 自动化。 |
 | **端侧协作** | 提供全局悬浮助手、带临时 PIN 的局域网 WebChat、FTP 文件传输，以及 FGS、WakeLock 与 Wi-Fi Lock 长任务保活能力。 |
 
-> 当前开发分支在 `v0.15.1` 基础上继续增强 Harness 恢复、MCP OAuth、能力按需发现和后台工作流。稳定版功能与安装包请以 [Releases](https://github.com/wkbin/tianxuan/releases) 页面为准。
+> 当前版本 v0.35.0 已完成 DeepSeek Harness 全核心机制对齐（33 项增强），涵盖会话事件日志、谱系追踪、压缩安全、投影系统、PTY readiness、技能注册表、PTC 运行时、守卫策略、作业注册表、审批审计等。稳定版功能与安装包请以 [Releases](https://github.com/xiaozhe7772222/tianxuan/releases) 页面为准。
 
 ---
 
@@ -92,7 +92,7 @@
 
 ### 1. 安装
 
-在 **ARM64、Android 10+**（推荐 Android 12+）设备上安装 [最新 Release APK](https://github.com/wkbin/tianxuan/releases)。Release 页面同时提供构建产物与 SHA-256，建议安装前校验。
+在 **ARM64、Android 10+**（推荐 Android 12+）设备上安装 [最新 Release APK](https://github.com/xiaozhe7772222/tianxuan/releases)。Release 页面同时提供构建产物与 SHA-256，建议安装前校验。
 
 ### 2. 初始化 Linux
 
@@ -199,7 +199,7 @@ export JAVA_HOME="/path/to/jdk-17"
 Debug APK 默认输出到：
 
 ```text
-app/build/outputs/apk/debug/tianxuan-v0.15.1-debug.apk
+app/build/outputs/apk/debug/tianxuan-v0.35.0-debug.apk
 ```
 
 ### 可选步骤
