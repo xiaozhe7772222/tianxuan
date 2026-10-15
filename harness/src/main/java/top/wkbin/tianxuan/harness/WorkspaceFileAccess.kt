@@ -39,6 +39,15 @@ class WorkspaceFileAccess(
     private val rootCanonical: File = root.absoluteFile.canonicalFile
 
     /**
+     * 当前文件写效果策略（对齐 DSH SandboxMode）。
+     * 默认 [WORKSPACE_WRITE]（只允许写工作区内）。
+     * [READ_ONLY] 时所有写操作直接拒绝。
+     * [DANGER_FULL_ACCESS] 时放行工作区外写入。
+     */
+    @Volatile
+    var sandboxMode: top.wkbin.tianxuan.core.model.SandboxMode = top.wkbin.tianxuan.core.model.SandboxMode.WORKSPACE_WRITE
+
+    /**
      * 文件版本守卫（对齐 DeepSeek Harness fs 模块）：read 时记录文件版本，
      * write/edit 时校验版本未变，防止多 agent 并发写同一文件时静默覆盖。
      * 版本 token = `size:lastModified`（简单可靠，文件被外部修改即变化）。
@@ -242,6 +251,11 @@ class WorkspaceFileAccess(
 
     /** 解析路径并强制其位于工作区内；目录可以不存在（用于写入）。 */
     private fun resolveWritable(path: String): File {
+        // 沙箱模式校验（对齐 DSH sandbox 三级）：
+        // READ_ONLY 拒绝所有写；WORKSPACE_WRITE 只允许工作区内（默认行为，原有 resolve 校验）
+        if (sandboxMode == top.wkbin.tianxuan.core.model.SandboxMode.READ_ONLY) {
+            throw SecurityException("当前文件策略为只读（read-only），禁止写入：${display(path)}")
+        }
         val resolved = resolve(path)
             ?: throw IllegalArgumentException("路径越界：${display(path)}")
         if (resolved.exists() && resolved.isDirectory) {
