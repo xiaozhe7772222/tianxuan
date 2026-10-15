@@ -30,6 +30,26 @@ data class HarnessSessionEntity(
     val approvalMode: String = ApprovalMode.ASSISTED.id,
     /** 运行意图（BUILD/PLAN），与 [approvalMode] 正交；新会话继承全局默认。 */
     @ColumnInfo(defaultValue = "build") val runMode: String = RunMode.BUILD.id,
+    /**
+     * 会话谱系（对齐 DSH SessionHeader.lineage）：本会话从哪个会话分叉而来。
+     * 分叉（fork）时记录父会话 id；顶级会话为 null。
+     */
+    @ColumnInfo(defaultValue = "NULL") val parentSessionId: String? = null,
+    /**
+     * 是否包含分叉继承的事件前缀（fork-inherited event prefix）。
+     * 由分叉构造写 true；普通新会话为 false。
+     */
+    @ColumnInfo(defaultValue = "0") val isSeeded: Boolean = false,
+    /**
+     * 会话起源分类：'subagent' 标记由子智能体会话创建；null 为顶层会话。
+     * 这是呈现元数据，不证明子会话可续跑（对齐 DSH origin?: 'subagent'）。
+     */
+    @ColumnInfo(defaultValue = "NULL") val origin: String? = null,
+    /**
+     * 委派深度：顶层会话为 null（0），子代理子会话为父深度 + 1。
+     * 持久化保证递归预算跨重启存活（对齐 DSH delegationDepth）。
+     */
+    @ColumnInfo(defaultValue = "NULL") val delegationDepth: Int? = null,
 )
 
 @Dao
@@ -69,4 +89,24 @@ interface HarnessSessionDao {
 
     @Query("SELECT * FROM harness_sessions")
     suspend fun listAll(): List<HarnessSessionEntity>
+
+    /** 查询某会话的谱系信息（分叉来源、是否为子代理等）。 */
+    @Query("SELECT parentSessionId, isSeeded, origin, delegationDepth FROM harness_sessions WHERE id = :id LIMIT 1")
+    suspend fun findLineage(id: String): SessionLineageTuple?
+
+    /** 查询某会话的所有子会话（分叉/子代理后代）。 */
+    @Query("SELECT * FROM harness_sessions WHERE parentSessionId = :parentId ORDER BY createdAt ASC")
+    suspend fun findChildren(parentId: String): List<HarnessSessionEntity>
+
+    /** 更新会话谱系（分叉/子代理创建时调用）。 */
+    @Query("UPDATE harness_sessions SET parentSessionId = :parentSessionId, isSeeded = :isSeeded, origin = :origin, delegationDepth = :delegationDepth WHERE id = :id")
+    suspend fun setLineage(id: String, parentSessionId: String?, isSeeded: Boolean, origin: String?, delegationDepth: Int?)
+
+    /** 谱系查询结果的 Room 投影。 */
+    data class SessionLineageTuple(
+        val parentSessionId: String?,
+        val isSeeded: Boolean,
+        val origin: String?,
+        val delegationDepth: Int?,
+    )
 }
