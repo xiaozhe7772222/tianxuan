@@ -37,7 +37,9 @@ enum class HarnessTool {
     @SerialName("goal_block") GOAL_BLOCK,
     @SerialName("goal_status") GOAL_STATUS,
     @SerialName("goal_clear") GOAL_CLEAR,
+    @SerialName("batch") BATCH,
 }
+
 
 /**
  * Harness 会话消息。序列化格式即持久化格式（Room 存 payloadJson），

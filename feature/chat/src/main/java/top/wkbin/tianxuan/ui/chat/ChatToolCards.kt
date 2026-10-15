@@ -546,6 +546,7 @@ internal fun toolName(tool: HarnessTool, rawToolName: String? = null): String {
         HarnessTool.GOAL_BLOCK -> "goal_block"
         HarnessTool.GOAL_STATUS -> "goal_status"
         HarnessTool.GOAL_CLEAR -> "goal_clear"
+        HarnessTool.BATCH -> "batch"
     }
 }
 

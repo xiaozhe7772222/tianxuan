@@ -80,7 +80,7 @@ fun ToolDiffView(
             HarnessTool.KNOWLEDGE, HarnessTool.KB_ADD, HarnessTool.KB_LIST,
             HarnessTool.GOAL_CREATE, HarnessTool.GOAL_PAUSE, HarnessTool.GOAL_RESUME,
             HarnessTool.GOAL_COMPLETE, HarnessTool.GOAL_BLOCK, HarnessTool.GOAL_STATUS,
-            HarnessTool.GOAL_CLEAR -> BaseToolDiff(call, result)
+            HarnessTool.GOAL_CLEAR, HarnessTool.BATCH -> BaseToolDiff(call, result)
         }
     }
 }

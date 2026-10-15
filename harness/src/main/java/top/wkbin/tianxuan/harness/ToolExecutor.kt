@@ -422,6 +422,7 @@ class ToolExecutor(
             HarnessTool.GOAL_BLOCK -> executeGoalBlock(args)
             HarnessTool.GOAL_STATUS -> executeGoalStatus()
             HarnessTool.GOAL_CLEAR -> executeGoalClear()
+            HarnessTool.BATCH -> executeBatch(args, sessionId, workspace)
             HarnessTool.BUILD_SCRIPT -> buildScriptToolExecutor?.execute(args, workspace) ?: (false to "未初始化构建脚本管理器")
             HarnessTool.SUBAGENT -> if (rawToolName.equals("invoke_dual_agent", ignoreCase = true)) {
                 dualAgentCoordinator?.executeFromTool(args, sessionId, workspace) ?: (false to "未初始化双智能体编排器")
@@ -1731,6 +1732,45 @@ class ToolExecutor(
             is top.wkbin.tianxuan.harness.goal.GoalResult.NotFound -> false to "无当前 Goal"
             else -> false to "Goal 清除失败"
         }
+    }
+
+    /**
+     * batch 工具（PTC 最小可行实现，对齐 DeepSeek Harness PTC 的 run_code 核心价值）：
+     * 模型一次提交多个工具调用（JSON 数组），Harness 按序执行并聚合结果。
+     * 减少模型与工具的往返轮次，适合批量文件操作、多步检查等场景。
+     */
+    private suspend fun executeBatch(
+        args: JsonObject,
+        sessionId: String,
+        workspace: String,
+    ): Pair<Boolean, String> {
+        val callsArray = args["calls"]?.let { it as? kotlinx.serialization.json.JsonArray }
+            ?: return false to "batch 需要 calls 参数（JSON 数组，每项含 tool 和 args）"
+        if (callsArray.isEmpty()) return true to "batch 为空，无操作执行"
+        val results = mutableListOf<String>()
+        var allSuccess = true
+        for ((index, callElem) in callsArray.withIndex()) {
+            val callObj = callElem as? JsonObject
+                ?: run { results += "[$index] 无效调用（非对象）"; allSuccess = false; continue }
+            val toolName = callObj["tool"]?.jsonPrimitive?.contentOrNull?.trim()
+                ?: run { results += "[$index] 缺少 tool 名称"; allSuccess = false; continue }
+            val toolArgs = (callObj["args"] as? JsonObject) ?: JsonObject(emptyMap())
+            val innerResult = execute(
+                ToolCall(
+                    id = java.util.UUID.randomUUID().toString(),
+                    createdAt = System.currentTimeMillis(),
+                    tool = HarnessApiMapper.toolByName(toolName),
+                    args = toolArgs,
+                    rawToolName = toolName,
+                ),
+                sessionId = sessionId,
+                workspace = workspace,
+                allowApprovalRequest = false,
+            )
+            results += "[$index] $toolName: ${if (innerResult.success) "成功" else "失败"} — ${innerResult.output.take(200)}"
+            if (!innerResult.success) allSuccess = false
+        }
+        return allSuccess to results.joinToString("\n")
     }
 
     companion object {

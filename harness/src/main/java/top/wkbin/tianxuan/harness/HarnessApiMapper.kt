@@ -66,6 +66,7 @@ internal object HarnessApiMapper {
             lower == "goal_block" -> HarnessTool.GOAL_BLOCK
             lower == "goal_status" -> HarnessTool.GOAL_STATUS
             lower == "goal_clear" -> HarnessTool.GOAL_CLEAR
+            lower == "batch" -> HarnessTool.BATCH
             lower == "use_capability" -> HarnessTool.MCP
             trimmed.startsWith("mcp__") -> HarnessTool.MCP
             else -> HarnessTool.BASE
@@ -103,5 +104,6 @@ internal object HarnessApiMapper {
         HarnessTool.GOAL_BLOCK -> "goal_block"
         HarnessTool.GOAL_STATUS -> "goal_status"
         HarnessTool.GOAL_CLEAR -> "goal_clear"
+        HarnessTool.BATCH -> "batch"
     }
 }

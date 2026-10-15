@@ -1417,6 +1417,15 @@ class ProviderClient(
             ),
             ApiToolDefinition(
                 function = ApiFunctionDefinition(
+                    name = "batch",
+                    description = "批量执行多个工具调用（JSON 数组，每项含 tool 和 args），按序执行并聚合结果。减少模型与工具的往返轮次。适用于批量文件操作、多步检查等场景。",
+                    parameters = Json.parseToJsonElement(
+                        """{"type":"object","properties":{"calls":{"type":"array","items":{"type":"object","properties":{"tool":{"type":"string"},"args":{"type":"object"}},"required":["tool"]}}},"required":["calls"]}""",
+                    ).jsonObject,
+                ),
+            ),
+            ApiToolDefinition(
+                function = ApiFunctionDefinition(
                     name = "build_script",
                     description = "管理智坊构建脚本并挂载到项目。新旧依赖不兼容时，先检查项目 Gradle/Flutter 配置，再 create 脚本并 bind 当前项目。脚本接口：第 1 个参数是项目目录；Android 第 2 个参数是 Gradle task；Flutter 第 2 个参数是完整 build 参数。支持 list/get/create/update/delete/bind/unbind。",
                     parameters = Json.parseToJsonElement(

@@ -63,5 +63,6 @@ object ToolStatusDescriber {
         HarnessTool.GOAL_BLOCK -> "正在阻塞 Goal：${arg(args, "reason")?.take(MAX_STATUS_ARG_LENGTH) ?: ""}"
         HarnessTool.GOAL_STATUS -> "正在查看 Goal 状态"
         HarnessTool.GOAL_CLEAR -> "正在清除 Goal"
+        HarnessTool.BATCH -> "正在批量执行 ${arg(args, "calls")?.let { "多个工具" } ?: "工具调用"}"
     }
 }
