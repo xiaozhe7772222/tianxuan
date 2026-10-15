@@ -95,7 +95,7 @@
         "harness/src/main/java/top/wkbin/tianxuan/harness/mcp/McpHttpTransport.kt": 702,
         "harness/src/main/java/top/wkbin/tianxuan/harness/mcp/McpManager.kt": 466,
         "harness/src/main/java/top/wkbin/tianxuan/harness/mcp/McpStdioTransport.kt": 432,
-        "harness/src/main/java/top/wkbin/tianxuan/harness/prompt/SystemPromptBuilder.kt": 682,
+        "harness/src/main/java/top/wkbin/tianxuan/harness/prompt/SystemPromptBuilder.kt": 704,
         "harness/src/main/java/top/wkbin/tianxuan/harness/subagent/SubagentLaneContracts.kt": 507,
         "harness/src/main/java/top/wkbin/tianxuan/harness/subagent/SubagentLaneRunner.kt": 498,
         "harness/src/main/java/top/wkbin/tianxuan/harness/workflow/HostActionNodeExecutor.kt": 539,

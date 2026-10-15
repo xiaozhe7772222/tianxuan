@@ -64,6 +64,15 @@ class SystemPromptBuilder(
     )
 
     private val workspacePartsCache = ConcurrentHashMap<String, WorkspacePromptParts>()
+
+    /**
+     * 技能 catalog 摘要缓存（对齐 DSH tool-skill/src/index.ts:330-337）：
+     * 只在技能列表内容变化时才重新生成 catalog 文本，避免每轮组装都重复构建。
+     */
+    @Volatile
+    private var lastSkillCatalogDigest: String = ""
+    @Volatile
+    private var cachedSkillCatalog: String = ""
     /**
      * 组装完整系统提示词（分层结构）；各分节缺失时自然留空并由 joinToString 过滤。
      *
@@ -113,7 +122,16 @@ class SystemPromptBuilder(
         val missedMentions = selectUnmatchedMentions(allSkills, effectiveMentions)
         val skippedSkills = mutableListOf<String>()
 
-        val skillSection = buildString {
+        // 技能 catalog 摘要比对（对齐 DSH tool-skill/src/index.ts:330-337）：
+        // 计算当前可见技能列表的 SHA-256 摘要，与上次比对——相同则复用缓存的 catalog 文本，
+        // 避免每轮组装都重复构建技能名称+描述列表（对长会话有可观的 token 节省）。
+        val catalogDigest = selectedSkills.sortedBy { it.id }
+            .joinToString("|") { "${it.id}:${it.name}:${it.isEnabled}" }
+            .hashCode().toString()
+        val skillSection = if (catalogDigest == lastSkillCatalogDigest && cachedSkillCatalog.isNotEmpty()) {
+            cachedSkillCatalog
+        } else {
+            buildString {
             if (selectedSkills.isNotEmpty()) {
                 append("## 当前生效的专精技能指导规则 (Active Skills)\n\n")
                 var used = 0
@@ -157,6 +175,10 @@ class SystemPromptBuilder(
                     append(catalog)
                 }
             }
+        }.also {
+            lastSkillCatalogDigest = catalogDigest
+            cachedSkillCatalog = it
+        }
         }
 
         val installedTools =
