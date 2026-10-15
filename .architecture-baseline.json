@@ -23,7 +23,7 @@
         "feature/chat/src/main/java/top/wkbin/tianxuan/ui/chat/ChatSheets.kt": 845,
         "feature/chat/src/main/java/top/wkbin/tianxuan/ui/chat/ChatToolCards.kt": 642,
         "feature/chat/src/main/java/top/wkbin/tianxuan/ui/chat/ChatViewModel.kt": 1558,
-        "feature/chat/src/main/java/top/wkbin/tianxuan/ui/chat/ChatWorkbenchPanels.kt": 1617,
+        "feature/chat/src/main/java/top/wkbin/tianxuan/ui/chat/ChatWorkbenchPanels.kt": 1629,
         "feature/chat/src/main/java/top/wkbin/tianxuan/ui/chat/ToolDiffView.kt": 481,
         "feature/chat/src/main/java/top/wkbin/tianxuan/ui/chat/artifact/ArtifactPreviewSheet.kt": 526,
         "feature/chat/src/main/java/top/wkbin/tianxuan/ui/chat/floating/FloatingChatView.kt": 656,

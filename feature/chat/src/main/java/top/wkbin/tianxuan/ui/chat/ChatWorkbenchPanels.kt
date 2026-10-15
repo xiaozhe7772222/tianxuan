@@ -1446,6 +1446,18 @@ private fun eventVisual(event: HarnessEvent): EventVisual = when (event) {
         "工序 ${event.stepId} · ${event.title}",
         event.resultSummary ?: "状态: ${event.status}",
     )
+    is HarnessEvent.ApprovalAsked -> EventVisual(
+        RuntimeIconName.Shield,
+        MaterialTheme.colorScheme.tertiary,
+        "审批请求",
+        "${event.toolName}: ${event.reason}".takeIf { it.isNotBlank() } ?: event.toolName,
+    )
+    is HarnessEvent.ApprovalDecided -> EventVisual(
+        if (event.outcome == "ALLOWED_ONCE") RuntimeIconName.Check else RuntimeIconName.Stop,
+        if (event.outcome == "ALLOWED_ONCE") Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+        "审批结果",
+        event.outcome,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

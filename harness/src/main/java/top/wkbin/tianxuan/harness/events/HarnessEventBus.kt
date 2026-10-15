@@ -110,6 +110,30 @@ sealed interface HarnessEvent {
         val dependencies: List<String> = emptyList(),
         val resultSummary: String? = null,
     ) : HarnessEvent
+
+    /**
+     * 审批问题被提出（对齐 DSH approval/asked）：log-only 审计事件。
+     * [requestId] 与 [ApprovalDecided] 配对。
+     */
+    data class ApprovalAsked(
+        override val sessionId: String,
+        override val timestamp: Long,
+        val requestId: String,
+        val toolName: String,
+        val toolCallId: String? = null,
+        val reason: String = "",
+    ) : HarnessEvent
+
+    /**
+     * 审批结果（对齐 DSH approval/decided）：与 [ApprovalAsked] 同 requestId。
+     * outcome: allowed-once / rejected / cancelled / unavailable。
+     */
+    data class ApprovalDecided(
+        override val sessionId: String,
+        override val timestamp: Long,
+        val requestId: String,
+        val outcome: String,
+    ) : HarnessEvent
 }
 
 /**
