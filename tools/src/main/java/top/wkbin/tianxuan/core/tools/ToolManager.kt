@@ -315,14 +315,13 @@ class ToolManager(
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (throwable: Throwable) {
-                // Handled in install flow
             }
         }
         val existing = installJobs.putIfAbsent(toolId, job)
-        if (existing != null && existing.isActive) {
-            job.cancel()
-            return existing
-        }
+        if (existing != null && existing.isActive) { job.cancel(); return existing }
+        // 既有表项非活跃（已完成但 finally 尚未 remove）：按值移除后再登记，避免新 Job 已 start
+        // 却未登记 → installInternal 的 putIfAbsent 取回旧 Job，check 失败被静默吞（安装无反应）
+        if (existing != null) installJobs.remove(toolId, existing)
         job.start()
         return job
     }
@@ -992,6 +991,7 @@ class ToolManager(
         updateProgress(state)
     }
 
+    @Synchronized // 串行化读-改-写：并发装配流各自 read-modify-write 会互相覆盖、丢失进度条目
     private fun updateProgress(progress: ToolInstallProgress) {
         _installProgress.value = _installProgress.value + (progress.toolId to progress)
     }
