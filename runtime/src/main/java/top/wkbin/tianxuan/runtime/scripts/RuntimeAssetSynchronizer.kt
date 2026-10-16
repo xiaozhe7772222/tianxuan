@@ -15,7 +15,10 @@ class RuntimeAssetSynchronizer(
     private val context: Context,
     private val pathManager: RuntimePathManager,
 ) {
+    private val SAFE_SCRIPT_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
     suspend fun syncWorkshopScript(distroId: String, fileName: String, content: String): String = withContext(Dispatchers.IO) {
+        // 纵深防御：fileName 只允许单段安全文件名，禁止分隔符与 `..`，避免越出 scripts 目录
+        require(SAFE_SCRIPT_NAME.matches(fileName)) { "脚本名无效：$fileName" }
         val safeDistro = distroId.lowercase().trim()
         pathManager.ensureDistroDirectories(safeDistro)
         val target = File(pathManager.tianxuanScriptsDir(safeDistro), fileName)

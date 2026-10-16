@@ -60,7 +60,8 @@ class HookEventPipeline(
 
     /** JavaBridge 线程调用：拒收超大事件，其余 trySend 立即返回。 */
     fun enqueue(tabId: String, json: String) {
-        if (json.length > MAX_EVENT_BYTES) return
+        // 按 UTF-8 实际字节数判定：非 ASCII 事件的字节数可达字符数的数倍，旧口径（json.length）会放行超限事件
+        if (json.toByteArray(Charsets.UTF_8).size > MAX_EVENT_BYTES) return
         channel.trySend(tabId to json)
     }
 

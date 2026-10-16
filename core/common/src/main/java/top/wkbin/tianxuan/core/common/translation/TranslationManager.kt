@@ -255,6 +255,7 @@ class TranslationManager(
             appLogger.i("TranslationManager: ML Kit translation models downloaded successfully")
             Result.success(Unit)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e // 取消必须透传，不能被当成失败吞掉
             appLogger.e("TranslationManager: Download translation models failed", e)
             val msg = e.localizedMessage ?: "下载失败，若网络受限请检查连接或代理设置后重试"
             _status.value = TranslationModelStatus.Error(msg)
@@ -274,6 +275,7 @@ class TranslationManager(
             appLogger.i("TranslationManager: ML Kit translation models deleted successfully")
             Result.success(Unit)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e // 取消透传
             appLogger.e("TranslationManager: Delete translation models failed", e)
             val msg = e.localizedMessage ?: "删除模型失败"
             _status.value = TranslationModelStatus.Error(msg)
@@ -305,6 +307,7 @@ class TranslationManager(
             translationCache[cacheKey] = translated
             Result.success(translated)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e // 取消透传
             appLogger.e("TranslationManager: Translation execution failed", e)
             Result.failure(e)
         }

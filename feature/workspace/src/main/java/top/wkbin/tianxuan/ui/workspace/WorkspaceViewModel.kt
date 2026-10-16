@@ -145,9 +145,8 @@ class WorkspaceViewModel(
 
     fun refreshInstalledStatus() {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                _installedComponentIds.value = toolManager.probeInstalledComponents()
-            } catch (_: Exception) {}
+            try { _installedComponentIds.value = toolManager.probeInstalledComponents() }
+            catch (e: Exception) { android.util.Log.w("WorkspaceViewModel", "probeInstalledComponents failed", e) }
         }
     }
 

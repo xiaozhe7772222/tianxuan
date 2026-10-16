@@ -87,6 +87,7 @@ class CdpFetchInterceptor(
         val startedAt = System.currentTimeMillis()
 
         val decision = CdpFetchDecision.decide(store.rulesFor(tabId), url, method)
+        try {
         when (decision) {
             is FetchDecision.Pass -> continueRequest(requestId, sessionId)
 
@@ -151,6 +152,21 @@ class CdpFetchInterceptor(
                 )
                 continueRequest(requestId, sessionId, headers = merged)
             }
+        }
+        } catch (t: Throwable) {
+            // 决策或发送失败时**必须仍终结该请求**，否则页面网络会永久挂在 paused 状态
+            // （调用方 pumpJob 的 runCatching 会吞掉异常，请求就再也没人 continue/fail）。
+            runCatching {
+                session.send(
+                    "Fetch.failRequest",
+                    buildJsonObject {
+                        put("requestId", requestId)
+                        put("errorReason", "Failed")
+                    },
+                    sessionId = sessionId,
+                )
+            }
+            throw t
         }
     }
 
