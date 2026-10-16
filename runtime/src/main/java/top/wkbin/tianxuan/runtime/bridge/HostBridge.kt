@@ -238,8 +238,9 @@ class HostBridge(
             return HttpResponse(400, errorJson("Missing 'path' field"))
         }
 
-        // 将沙箱路径映射到宿主路径
+        // 映射沙箱路径；受控共享区域之外的路径一律拒绝（防沙箱逃逸）
         val hostPath = resolveSandboxPath(apkPath)
+            ?: return HttpResponse(400, errorJson("Path not allowed: $apkPath"))
         var apkFile = File(hostPath)
         if (!apkFile.isFile) {
             // 智能容错：如果在指定路径未找到，尝试在工作区目录中按文件名模糊搜索匹配的最新 APK
@@ -255,7 +256,7 @@ class HostBridge(
                 logger.i("HostBridge: APK 在 '$hostPath' 未找到，通过工作区扫描智能匹配到 '${fallback.absolutePath}'")
                 apkFile = fallback
             } else {
-                return HttpResponse(404, errorJson("APK file not found: $apkPath (resolved: $hostPath)"))
+                return HttpResponse(404, errorJson("APK file not found: $apkPath"))
             }
         }
         if (!apkFile.name.endsWith(".apk", ignoreCase = true)) {
@@ -393,12 +394,10 @@ class HostBridge(
     // ============================ 工具方法 ============================
 
     /**
-     * 将沙箱内路径映射到宿主路径。
-     * /sdcard/Download/app.apk → /storage/emulated/0/Download/app.apk
-     * /workspace/... → pathManager.workspaceDir/...
-     * /attachments/... → pathManager.attachmentsDir/...
+     * 沙箱路径 → 宿主路径；仅放行 sdcard / storage/emulated/0 / workspace / attachments。
+     * 其余（含 /data、/system 等任意宿主绝对路径）返回 null 拒绝：沙箱可读 bridge key，放行即逃逸。
      */
-    private fun resolveSandboxPath(sandboxPath: String): String {
+    private fun resolveSandboxPath(sandboxPath: String): String? {
         val trimmed = sandboxPath.trim()
         return when {
             trimmed.startsWith("/sdcard/") ->
@@ -411,7 +410,7 @@ class HostBridge(
                 // canonicalize 并校验仍位于 workspaceDir 内，防止 ../ 越出映射根
                 val root = pathManager.workspaceDir.canonicalPath
                 val resolved = File(pathManager.workspaceDir, trimmed.removePrefix("/workspace/")).canonicalPath
-                if (resolved == root || resolved.startsWith(root + File.separator)) resolved else root
+                if (resolved == root || resolved.startsWith(root + File.separator)) resolved else null
             }
             trimmed == "/workspace" ->
                 pathManager.workspaceDir.absolutePath
@@ -420,13 +419,13 @@ class HostBridge(
             trimmed == "/attachments" ->
                 pathManager.attachmentsDir.absolutePath
             else -> {
-                // 相对路径或去除开头的斜杠：仅当解析后仍在 workspaceDir 内时才视为工作区文件
+                // 相对路径：仅当解析后仍在 workspaceDir 内时视为工作区文件，否则拒绝
                 val wsRelative = File(pathManager.workspaceDir, trimmed.removePrefix("/"))
                 val root = pathManager.workspaceDir.canonicalPath
                 if (wsRelative.exists() && wsRelative.canonicalPath.startsWith(root + File.separator)) {
                     wsRelative.absolutePath
                 } else {
-                    trimmed // 宿主绝对路径（如 /data/app/...），交由调用处校验
+                    null
                 }
             }
         }

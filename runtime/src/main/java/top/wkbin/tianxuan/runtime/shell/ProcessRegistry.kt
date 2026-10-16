@@ -5,6 +5,7 @@ import top.wkbin.tianxuan.runtime.RuntimePathManager
 import top.wkbin.tianxuan.runtime.proot.ProotCommandBuilder
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -54,6 +55,17 @@ class ProcessRegistryImpl(
     private val prootCommandBuilder: ProotCommandBuilder,
 ) : ProcessRegistry {
     private val mutex = Mutex()
+
+    /**
+     * 保护 [processes] 的 Java 监视器。
+     *
+     * 协程 [mutex] 只能串行化 suspend 变更路径，而 [list] 是非 suspend 的，无法获取
+     * [mutex]。若 `list()` 无锁遍历这个普通 `LinkedHashMap`，与并发变更
+     * （start/stop/stopAll/cleanupDeadProcesses）交错就会抛
+     * `ConcurrentModificationException`。因此所有对 [processes] 的读写统一在
+     * [processesLock] 下进行。
+     */
+    private val processesLock = Any()
     private val processes = LinkedHashMap<String, ManagedProcess>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val logsMap = ConcurrentHashMap<String, MutableStateFlow<List<String>>>()
@@ -80,7 +92,8 @@ class ProcessRegistryImpl(
         distroId: String?,
         mounts: List<StorageMountBinding>,
     ): ManagedProcess = mutex.withLock {
-        processes.remove(id)?.session?.close()
+        val previous = synchronized(processesLock) { processes.remove(id) }
+        previous?.session?.close()
         val safeDistro = distroId?.lowercase()?.trim()?.takeIf { it.isNotBlank() }
             ?: pathManager.listInstalledDistroIds().firstOrNull() ?: "ubuntu"
         val session = ProcessLinuxSession(
@@ -116,7 +129,10 @@ class ProcessRegistryImpl(
                             }
                         }
                 }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (_: Exception) {
+                // 日志收集异常（如 fd 关闭）不应中断会话；停止通知由 finally 追加。
             } finally {
                 val exitNotice = "[TianXuan] 服务进程已停止"
                 appendLog(logKey, exitNotice)
@@ -133,27 +149,33 @@ class ProcessRegistryImpl(
             toolId = toolId,
             pid = session.pid,
             type = type,
-        ).also { processes[id] = it }
+        ).also { synchronized(processesLock) { processes[id] = it } }
     }
 
     override suspend fun stop(id: String): Boolean = mutex.withLock {
-        val process = processes.remove(id) ?: return@withLock false
+        val process = synchronized(processesLock) { processes.remove(id) } ?: return@withLock false
         process.session.close()
         true
     }
 
     override suspend fun stopAll() = mutex.withLock {
-        processes.values.forEach { it.session.close() }
-        processes.clear()
+        // 先在锁内取出快照并清空表，再在锁外逐个 close（close 是 suspend，不能持监视器调用）。
+        val snapshot = synchronized(processesLock) {
+            processes.values.toList().also { processes.clear() }
+        }
+        snapshot.forEach { it.session.close() }
     }
 
     override suspend fun cleanupDeadProcesses(): Int = mutex.withLock {
-        val dead = processes.values.filter { !it.session.isAlive }
-        dead.forEach { processes.remove(it.id) }
+        val dead = synchronized(processesLock) {
+            val stale = processes.values.filter { !it.session.isAlive }
+            stale.forEach { processes.remove(it.id) }
+            stale
+        }
         dead.size
     }
 
-    override fun list(): List<ManagedProcess> = processes.values.toList()
+    override fun list(): List<ManagedProcess> = synchronized(processesLock) { processes.values.toList() }
 
     override fun observeLogs(idOrToolId: String): Flow<List<String>> =
         getOrCreateLogFlow(idOrToolId).asStateFlow()

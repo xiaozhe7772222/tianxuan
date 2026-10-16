@@ -39,6 +39,7 @@ internal class AndroidHttpServer private constructor(
     /** 已 accept 且尚未关闭的连接，用于 [stop] 时回收 SSE 这类长连接。 */
     private val activeSockets = ConcurrentHashMap.newKeySet<Socket>()
     private var serverSocket: ServerSocket? = null
+    private var acceptThread: Thread? = null
 
     @Volatile
     private var running = false
@@ -72,7 +73,7 @@ internal class AndroidHttpServer private constructor(
         }
         serverSocket = socket
         running = true
-        Thread({ acceptConnections(socket) }, "tianxuan-webchat-accept").apply {
+        acceptThread = Thread({ acceptConnections(socket) }, "tianxuan-webchat-accept").apply {
             isDaemon = true
             start()
         }
@@ -83,6 +84,12 @@ internal class AndroidHttpServer private constructor(
         running = false
         runCatching { serverSocket?.close() }
         serverSocket = null
+        // 关键：accept 线程可能仍阻塞在 `accept()`。在 Linux 上，另一线程阻塞于 accept() 时
+        // 仅 close() 监听 fd 并不立即释放端口——须等 accept() 返回（fd 引用真正归还）后才释放。
+        // 因此这里 join 一下，保证 stop() 返回时监听 socket 确已释放，同端口可立刻重绑（WebChat
+        // 服务会被反复启停，否则偶发 EADDRINUSE）。
+        acceptThread?.let { runCatching { it.join(ACCEPT_JOIN_TIMEOUT_MS) } }
+        acceptThread = null
         // 已 accept 的连接不会随监听 socket 一起关闭：SSE 流可以挂住工作线程与 fd。
         activeSockets.forEach { runCatching { it.close() } }
         activeSockets.clear()
@@ -252,6 +259,8 @@ internal class AndroidHttpServer private constructor(
         private const val INITIAL_LINE_BYTES = 128
         private const val MAX_WORKER_THREADS = 8
         private const val WORKER_KEEP_ALIVE_SECONDS = 30L
+        /** stop() 等待 accept 线程退出的上限：close 后 accept 应立即抛异常返回，通常毫秒级。 */
+        private const val ACCEPT_JOIN_TIMEOUT_MS = 1_000L
 
         fun create(address: InetSocketAddress, backlog: Int): AndroidHttpServer =
             AndroidHttpServer(address, backlog)

@@ -11,12 +11,11 @@ object ContextWindowPolicy {
      * 折叠线为 provider 可见 tools 数组预留的 token。
      *
      * 口径与 [estimateToolDefinitionTokens] 一致，实测对象是 `ProviderClient.TOOLS`：
-     * 2026-09-29 实测 5,724（20 个内置工具，含 host 新增 virtual_screen_* 动作与 session 参数），
-     * 取 5,900 留约 3% 余量。
-     * 旧值 4,096 低于实测约 1,400，这段缺口会直接从折叠线余量里挖走（溢出风险）。
+     * 当前 25 个内置工具实测 6,676，取 6,700 留少量余量。
+     * 旧值 6,300 低于实测，这段缺口会直接从折叠线余量里挖走（真实输入超出折叠线 → 400/413）。
      * 增删或放大工具后须用 ContextWindowPolicyTest 的一致性测试重新校准（低于实测即失败）。
      */
-    internal const val TOOL_SCHEMA_RESERVE_TOKENS = 6_300
+    internal const val TOOL_SCHEMA_RESERVE_TOKENS = 6_700
     private const val MAX_SYSTEM_PROMPT_FRACTION = 0.60
     private const val MIN_SYSTEM_PROMPT_TOKENS = 512
     /** 超过此 token 数的用户消息才参与巨型消息截断（普通消息交给折叠线，避免误伤）。 */

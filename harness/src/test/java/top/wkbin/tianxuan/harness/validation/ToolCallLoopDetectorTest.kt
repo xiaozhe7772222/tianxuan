@@ -56,13 +56,19 @@ class ToolCallLoopDetectorTest {
         val detector = ToolCallLoopDetector(maxIdenticalCallsStreak = 3)
         val args = buildJsonObject { put("path", "src/Main.kt") }
 
-        repeat(3) {
+        // 前两次：历史里还没有重复，判 Pass。
+        repeat(2) {
             assertEquals(ToolCallLoopDetector.LoopVerdict.Pass, detector.evaluate("read", args))
             detector.recordIntent("read", args)
             detector.recordSettled("read", args, success = true)
         }
 
-        // 第 4 次完全相同的调用被判定为无进展死循环
+        // 第三次：达到温和提醒阈值（warnThreshold=2），只发 Warn 给模型自我纠正机会，不阻断。
+        assertTrue(detector.evaluate("read", args) is ToolCallLoopDetector.LoopVerdict.Warn)
+        detector.recordIntent("read", args)
+        detector.recordSettled("read", args, success = true)
+
+        // 第四次完全相同的调用：达到 maxIdenticalCallsStreak(=3)，判定为无进展死循环并强制拦截。
         val verdict = detector.evaluate("read", args)
         assertTrue(verdict is ToolCallLoopDetector.LoopVerdict.Block)
         val block = verdict as ToolCallLoopDetector.LoopVerdict.Block

@@ -60,7 +60,9 @@ class VirtualDisplayCoordinator(
 
     /** 取指定会话的 controller（不存在则创建，仅持有本地状态，不触发 server 交互） */
     fun controller(sessionId: String): ShowerController =
-        sessions.getOrPut(sessionId) { ShowerController() }
+        // computeIfAbsent 原子；getOrPut 非原子，并发首建同一 sessionId 会得到两个 controller，
+        // 导致同一会话重复建屏、displayId/closeSession 状态错乱。
+        sessions.computeIfAbsent(sessionId) { ShowerController() }
 
     /** 指定会话当前虚拟屏 displayId（未创建为 null） */
     fun getDisplayId(sessionId: String): Int? = sessions[sessionId]?.getDisplayId()

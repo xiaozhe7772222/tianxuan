@@ -2,12 +2,11 @@ package top.wkbin.tianxuan.harness.ptc
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 
 /**
  * PTC 并发子调用调度器（对齐 DSH core/tools/src/ptc.ts 的 dispatch 管道）。
@@ -84,35 +83,26 @@ class PtcDispatcher(
             return batch.map { Result.failure(IllegalStateException("run is over; dispatch abandoned")) }
         }
 
-        // 按提交序执行：EXCLUSIVE 前后各有一个屏障
+        // 分段调度（对齐类注释语义）：连续 PARALLEL 归一段，用 [Semaphore] 按 [maxParallel]
+        // 限流并发；EXCLUSIVE 自成一段且在段内独占执行。段与段串行，因此独占运行期间
+        // 前后调用都不会启动，结果仍按提交序写回。
         val results = arrayOfNulls<Result<Unit>>(batch.size)
-        val barrier = Mutex()
-
-        val jobs = batch.mapIndexed { index, dispatch ->
-            scope.async {
-                try {
-                    when (dispatch.mode) {
-                        ExecutionMode.EXCLUSIVE -> {
-                            // 独占：等待屏障（所有并行在飞完成后才轮到）
-                            barrier.withLock {
-                                results[index] = runCatching { dispatch.execute() }
-                            }
-                        }
-                        ExecutionMode.PARALLEL -> {
-                            // 并行：获取槽位（屏障释放后，并行槽位有限制）
-                            barrier.withLock {
-                                results[index] = runCatching { dispatch.execute() }
-                            }
-                        }
-                    }
-                } catch (e: Throwable) {
-                    results[index] = Result.failure(e)
-                }
+        var index = 0
+        while (index < batch.size) {
+            if (batch[index].mode == ExecutionMode.EXCLUSIVE) {
+                results[index] = runCatching { batch[index].execute() }
+                index += 1
+                continue
             }
+            val end = (index until batch.size)
+                .firstOrNull { batch[it].mode == ExecutionMode.EXCLUSIVE } ?: batch.size
+            val permits = Semaphore(maxParallel.coerceAtLeast(1))
+            val jobs = (index until end).map { i ->
+                scope.async { permits.withPermit { results[i] = runCatching { batch[i].execute() } } }
+            }
+            jobs.forEach { it.await() }
+            index = end
         }
-
-        // 等待所有完成
-        jobs.forEach { it.await() }
         return results.toList().map { it ?: Result.success(Unit) }
     }
 }

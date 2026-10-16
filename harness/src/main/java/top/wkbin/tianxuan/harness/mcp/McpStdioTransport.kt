@@ -154,7 +154,7 @@ class McpStdioTransport(
             // B8: 与 connection() 的获取路径互斥（startupMutex）后二次确认 inFlight 与活跃时间，
             // 消除"新请求刚从 map 拿到连接、尚未锁 Connection.mutex"被清扫误关的 TOCTOU：
             // 新请求要么先在锁内 markActive（此处复查到新活跃时间即跳过），要么等锁释放后拿到新连接
-            val removed = startupMutexes.getOrPut(id) { Mutex() }.withLock {
+            val removed = startupMutexes.computeIfAbsent(id) { Mutex() }.withLock {
                 !connection.inFlight &&
                     nowMs - connection.lastActivityMs >= IDLE_TIMEOUT_MS &&
                     connections.remove(id, connection)
@@ -168,7 +168,7 @@ class McpStdioTransport(
     }
 
     private suspend fun connection(server: McpServerConfig, bypassCooldown: Boolean = false): Connection =
-        startupMutexes.getOrPut(server.id) { Mutex() }.withLock {
+        startupMutexes.computeIfAbsent(server.id) { Mutex() }.withLock {
             connectionLocked(server, bypassCooldown)
         }
 

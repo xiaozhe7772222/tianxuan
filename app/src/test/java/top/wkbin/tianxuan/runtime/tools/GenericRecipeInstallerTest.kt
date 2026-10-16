@@ -36,7 +36,8 @@ class GenericRecipeInstallerTest {
     }
 
     private class FakeProviderManager : ProviderManager() {
-        override suspend fun environment(): Map<String, String> = mapOf("TEST_ENV" to "1")
+        override suspend fun environment(allowedVarNames: Set<String>?): Map<String, String> =
+            mapOf("TEST_ENV" to "1")
     }
 
     @Test

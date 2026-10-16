@@ -180,9 +180,9 @@ class WebChatBridgeServer(
     private inner class StaticAssetHandler : AndroidHttpHandler {
         override fun handle(exchange: AndroidHttpExchange) {
             val path = exchange.requestURI.path.removePrefix("/").trimStart('/')
-            // MIME 表同时充当「是否静态资源」的判据：命中直取，未知扩展名 404，
-            // 空路径与前端路由回落 index.html
-            val mime = WebChatAssets.mimeTypeOrNull(path)
+            // MIME 表即「是否静态资源」判据（未命中回落 index.html）；含 .. /空段/反斜杠的路径不作资源
+            val safePath = path.isNotEmpty() && path.split('/').none { it == ".." || it.contains('\\') }
+            val mime = if (safePath) WebChatAssets.mimeTypeOrNull(path) else null
             val assetPath = if (mime != null) "webchat/$path" else "webchat/index.html"
             val stream: InputStream = runCatching { context.assets.open(assetPath) }.getOrElse {
                 if (mime != null) {

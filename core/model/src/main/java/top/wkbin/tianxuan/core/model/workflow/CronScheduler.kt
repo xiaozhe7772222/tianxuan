@@ -88,17 +88,24 @@ object CronScheduler {
         val dom = cal.get(Calendar.DAY_OF_MONTH)
         val month = cal.get(Calendar.MONTH) + 1
         val dow = cal.get(Calendar.DAY_OF_WEEK) - 1  // Calendar 周日=1 → 转为 0
-        val dowCron = if (dow == 0) 7 else dow  // 周日=7
-        if (fields.minutes != null && minute !in fields.minutes) return false
-        if (fields.hours != null && hour !in fields.hours) return false
-        if (fields.months != null && month !in fields.months) return false
+        val isSunday = dow == 0
+        val dowCron = if (isSunday) 7 else dow  // 周日按 7 参与匹配
+        val minutes = fields.minutes
+        val hours = fields.hours
+        val months = fields.months
+        val dayOfMonth = fields.dayOfMonth
+        val dayOfWeek = fields.dayOfWeek
+        if (minutes != null && minute !in minutes) return false
+        if (hours != null && hour !in hours) return false
+        if (months != null && month !in months) return false
+        // DOW 的 0 与 7 都表示周日：字段写 "0" 或 "7" 都必须能命中周日。
+        // 早先只把 dow 归一成 7，导致写法 "0"（Vixie 标准写法）永远匹配不到周日。
+        val dowMatches = dayOfWeek != null && (dowCron in dayOfWeek || (isSunday && 0 in dayOfWeek))
         // DOM/DOW 语义：两字段都受限时 OR，任一为 * 则 AND
-        val domRestricted = fields.dayOfMonth != null
-        val dowRestricted = fields.dayOfWeek != null
         return when {
-            domRestricted && dowRestricted -> dom in fields.dayOfMonth!! || dowCron in fields.dayOfWeek!!
-            domRestricted -> dom in fields.dayOfMonth!!
-            dowRestricted -> dowCron in fields.dayOfWeek!!
+            dayOfMonth != null && dayOfWeek != null -> dom in dayOfMonth || dowMatches
+            dayOfMonth != null -> dom in dayOfMonth
+            dayOfWeek != null -> dowMatches
             else -> true
         }
     }

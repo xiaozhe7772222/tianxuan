@@ -180,7 +180,7 @@ class McpHttpTransport(
         t is IOException || (t is IllegalStateException && t.message?.startsWith("MCP HTTP ") == true)
 
     private suspend fun ensureSession(server: McpServerConfig, bypassCooldown: Boolean = false): HttpSession =
-        sessionMutexes.getOrPut(server.id) { Mutex() }.withLock {
+        sessionMutexes.computeIfAbsent(server.id) { Mutex() }.withLock {
             ensureSessionLocked(server, bypassCooldown)
         }
 
@@ -241,7 +241,7 @@ class McpHttpTransport(
 
     /** B10: 禁用/删除 server 时关闭其会话（含 legacy SSE 长连接）并清冷却记录 */
     suspend fun closeSession(serverId: String) {
-        sessionMutexes.getOrPut(serverId) { Mutex() }.withLock {
+        sessionMutexes.computeIfAbsent(serverId) { Mutex() }.withLock {
             downUntil.remove(serverId)
             sessions.remove(serverId)?.legacy?.close()
         }

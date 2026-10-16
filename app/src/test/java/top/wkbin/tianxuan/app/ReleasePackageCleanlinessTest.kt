@@ -115,22 +115,32 @@ class ReleasePackageCleanlinessTest {
     }
 
     /**
-     * 判断第 [target] 行是否受 `if (tianxuanLeakCanary)` 开关保护。
+     * 判断第 [target] 行是否落在某个 `if (tianxuanLeakCanary) { ... }` 块内。
      *
-     * 做法：向上找最近一行「实质性代码」（跳过空行、注释、大括号），
-     * 它必须是开关块的 `if (...) {` 或其续行。之所以不靠大括号计数推断，
-     * 是因为那会把嵌套块里的依赖也当成被保护——一旦误判，守卫就会对着
-     * 正确写法报错。向上找控制语句是直接得多、也更符合意图的做法。
+     * 用花括号平衡向上扫描：从目标行向上，`}` 视为进入一层块、`{` 视为离开一层块；
+     * 首次使深度转负的那一行，就是目标所在块的**开括号所在控制语句**，只有它确实
+     * 是 leakcanary 开关，目标才受保护。
+     *
+     * 不能只取「向上最近一行实质性代码」：同一个开关块里的 debug / release 两条依赖
+     * 会互相遮挡——先写 `debugImplementation` 时，release 的上一行不是 `if` 而是 debug 行，
+     * 于是守卫对**正确写法**误报。本测试此前正因此缺陷而红。
      */
     private fun isGuardedByLeakCanaryFlag(target: Int): Boolean {
         val lines = appBuildFile.readLines()
+        var depth = 0
         for (i in target - 1 downTo 0) {
-            val code = lines[i].substringBefore("//").trim()
-            if (code.isEmpty() || code == "{" || code == "}") continue
-            // 命中开关声明；`{` 落在下一行也算同一控制语句。
-            if (code.startsWith("if (tianxuanLeakCanary)") || code == "if (tianxuanLeakCanary)") return true
-            // 遇到别的实质性控制语句/依赖声明即判定为「未被保护」。
-            return false
+            val code = lines[i].substringBefore("//")
+            for (ch in code.reversed()) {
+                when (ch) {
+                    '}' -> depth++
+                    '{' -> depth--
+                }
+            }
+            val trimmed = code.trim()
+            if (depth < 0) {
+                if (trimmed.isEmpty() || trimmed == "{" || trimmed == "}") continue
+                return trimmed.startsWith("if (tianxuanLeakCanary)")
+            }
         }
         return false
     }

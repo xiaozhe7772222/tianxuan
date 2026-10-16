@@ -56,7 +56,9 @@ object SessionTurnOutlineProjection : ProjectionDefinition<String, SessionTurnOu
             is UserMessage -> {
                 // 新轮次开始
                 val newEntry = TurnOutlineEntry(
-                    messageIndex = 0, // 索引在 drive 时不可知；用 turns.size 作为序号
+                    // 全局消息序号在折叠时不可知；用已累计轮数作为稳定递增序号，
+                    // 供 UI 轨道定位（原先恒填 0，导致每轮都指向第 0 条消息）。
+                    messageIndex = state.turns.size,
                     promptPreview = preview(event.text, PROMPT_PREVIEW_LIMIT),
                     responsePreview = "",
                     stepCount = 0,

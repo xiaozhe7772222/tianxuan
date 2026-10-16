@@ -60,7 +60,9 @@ class WorkspaceFileAccess(
     private fun versionOf(file: File): String = "${file.length()}:${file.lastModified()}"
 
     private fun lockFor(path: String): kotlinx.coroutines.sync.Mutex =
-        fileLocks.getOrPut(path) { kotlinx.coroutines.sync.Mutex() }
+        // computeIfAbsent 原子；getOrPut 是 get-then-put，并发首建同一路径会各得一把锁，
+        // 使 per-file 互斥与 stale-version 守卫失效。
+        fileLocks.computeIfAbsent(path) { kotlinx.coroutines.sync.Mutex() }
 
     suspend fun list(path: String): AppResult<List<WorkspaceEntry>> = withContext(Dispatchers.IO) {
         try {
@@ -144,44 +146,40 @@ class WorkspaceFileAccess(
     }
 
     suspend fun write(path: String, content: String): AppResult<Unit> = withContext(Dispatchers.IO) {
-        // per-file 互斥锁 + stale-version 守卫（对齐 DSH fs-observation-policy）：
-        // 同一文件的 read→edit→write 窗口串行化，且若文件被外部修改则拒绝覆盖。
-        lockFor(path).withLock {
-            try {
-                val contentBytes = content.toByteArray(Charsets.UTF_8).size
-                require(contentBytes <= MAX_WRITE_BYTES) { "内容过长（$contentBytes 字节，上限 $MAX_WRITE_BYTES）" }
-                val file = resolveWritable(path)
-                file.parentFile?.mkdirs()
-                // stale-version 守卫：已有版本记录且当前版本不一致时拒绝（外部已修改）
-                fileVersions[path]?.let { recorded ->
-                    if (recorded != versionOf(file)) {
-                        return@withLock failure(path, IllegalStateException(
-                            "文件已被外部修改（stale version），请重新 read 确认最新内容后再写。"
-                        ))
-                    }
-                }
-                val temporary = File(file.parentFile, ".${file.name}.tmp-${System.nanoTime()}")
-                try {
-                    temporary.writeText(content, Charsets.UTF_8)
-                    if (!temporary.renameTo(file)) {
-                        temporary.copyTo(file, overwrite = true)
-                        temporary.delete()
-                    }
-                } finally {
-                    temporary.delete()
-                }
-                fileVersions[path] = versionOf(file)
-                AppResult.Success(Unit)
-            } catch (throwable: Throwable) {
-                failure(path, throwable)
-            }
-        }
+        lockFor(path).withLock { writeLocked(path, content) }
     }
 
-    /**
-     * Harness 内部产物写入：不经过模型 write 工具的 1 MiB 限制，但仍受工作区边界、
-     * 原子替换和独立 16 MiB 配额约束。仅供日志/子代理产物引流使用。
-     */
+    /** 已持 [lockFor] 锁时的落盘实现；与 write 共用，避免 Mutex 重入导致 edit 自死锁。 */
+    private fun writeLocked(path: String, content: String): AppResult<Unit> = try {
+        val contentBytes = content.toByteArray(Charsets.UTF_8).size
+        require(contentBytes <= MAX_WRITE_BYTES) { "内容过长（$contentBytes 字节，上限 $MAX_WRITE_BYTES）" }
+        val file = resolveWritable(path)
+        file.parentFile?.mkdirs()
+        // stale-version 守卫：已有记录且当前版本不一致（已被外部修改）时拒绝覆盖
+        fileVersions[path]?.let { recorded ->
+            if (recorded != versionOf(file)) {
+                return failure(path, IllegalStateException("文件已被外部修改（stale version），请重新 read 确认最新内容后再写。"))
+            }
+        }
+        val temporary = File(file.parentFile, ".${file.name}.tmp-${System.nanoTime()}")
+        try {
+            temporary.writeText(content, Charsets.UTF_8)
+            if (!temporary.renameTo(file)) {
+                // copy 兜底会跟随符号链接：写前重新 canonical 校验，封堵越界符号链接 TOCTOU
+                require(isInside(globalRootCanonical ?: rootCanonical, file.canonicalFile)) { "目标路径越界：${display(path)}" }
+                temporary.copyTo(file, overwrite = true)
+                temporary.delete()
+            }
+        } finally {
+            temporary.delete()
+        }
+        fileVersions[path] = versionOf(file)
+        AppResult.Success(Unit)
+    } catch (throwable: Throwable) {
+        failure(path, throwable)
+    }
+
+    /** Harness 内部产物写入：不受 write 工具的 1 MiB 限制，但同样受工作区边界与原子替换约束。 */
     internal suspend fun writeHarnessArtifact(path: String, content: String): AppResult<Unit> = withContext(Dispatchers.IO) {
         try {
             val bytes = content.toByteArray(Charsets.UTF_8)
@@ -227,14 +225,13 @@ class WorkspaceFileAccess(
                     // stale-version 守卫：edit 前确认文件未被外部修改
                     fileVersions[path]?.let { recorded ->
                         if (recorded != versionOf(file)) {
-                            return@withLock failure(path, IllegalStateException(
-                                "文件已被外部修改（stale version），请重新 read 确认最新内容后再编辑。"
-                            ))
+                            return@withLock failure(path, IllegalStateException("文件已被外部修改（stale version），请重新 read 确认最新内容后再编辑。"))
                         }
                     }
                     val content = file.readText(Charsets.UTF_8)
                     val result = TextReplacerEngine.replace(content, oldText, newText)
-                    write(path, result.updated)
+                    // 已持 lockFor(path)，只能用不加锁的 writeLocked；调用 write 会重复取锁自死锁
+                    writeLocked(path, result.updated)
                         .errorOrNull()?.let { throw it.cause ?: IllegalStateException(it.message) }
                     AppResult.Success(
                         WorkspaceEditOutcome(

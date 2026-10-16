@@ -50,6 +50,9 @@ class ToolManagerInstallJobsConcurrencyTest {
             // 缺陷所在：判空与写入之间存在窗口。
             val existing = table[key]
             if (existing != null) return existing
+            // 人为放大「判空 → 写入」窗口：否则在快机器/新 JIT 下该窗口常被调度掩盖，
+            // 压测偶发复现不到竞态，使「测试有效性守卫」(observed > 0) 无谓转红。
+            Thread.sleep(1)
             val created = make()
             table[key] = created
             return created

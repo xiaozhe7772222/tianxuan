@@ -122,7 +122,10 @@ class CcSwitchCredentialsTest {
             val hostile = "pa\$(touch $sandbox/PWNED)ss"
             val script = buildWriteScript(hostile)
                 .replace("\${HOME:-/root}", sandbox.absolutePath)
-            val process = ProcessBuilder("/bin/sh", "-lc", script)
+            // 用非登录 shell（-c）：本用例要验证的是"单引号折叠在真实 shell 下仍是字面量"，
+            // 与是否加载宿主 /etc/profile 无关。用 -lc 会被宿主 login profile 干扰——
+            // 若该 profile 含 bash 专属语法，dash 会在执行脚本前就报错退出（本沙箱实测）。
+            val process = ProcessBuilder("/bin/sh", "-c", script)
                 .redirectErrorStream(true)
                 .start()
             process.inputStream.readBytes()

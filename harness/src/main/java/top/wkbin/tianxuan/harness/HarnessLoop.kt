@@ -238,7 +238,7 @@ class HarnessLoop(
                 refreshPendingProjection(sessId)
             }
         }
-        approvalTimeoutJobs[sessId] = job
+        approvalTimeoutJobs[sessId] = job.also { j -> j.invokeOnCompletion { approvalTimeoutJobs.remove(sessId, j) } }
     }
 
     /**

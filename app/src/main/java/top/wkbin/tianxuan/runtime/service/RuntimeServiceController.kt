@@ -30,10 +30,15 @@ class RuntimeServiceController(
     }
 
     fun stop() {
-        context.startService(
-            Intent(context, RuntimeForegroundService::class.java)
-                .setAction(RuntimeForegroundService.ACTION_STOP),
-        )
+        val intent = Intent(context, RuntimeForegroundService::class.java)
+            .setAction(RuntimeForegroundService.ACTION_STOP)
+        runCatching { context.startService(intent) }
+            .onFailure {
+                // 后台态禁止 startService（Android 8+ 起会抛 IllegalStateException）。退化为
+                // stopService，至少不让调用方崩溃；能被正常解除前台/清理的路径仍走 ACTION_STOP。
+                Log.w(TAG, "发送 ACTION_STOP 失败，退化为 stopService", it)
+                runCatching { context.stopService(Intent(context, RuntimeForegroundService::class.java)) }
+            }
     }
 
     private companion object {

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 真正的 PTY 会话：JNI forkpty 打开 master/slave，命令直接 exec 在 slave 上
@@ -140,8 +141,9 @@ class NativePtySession(
 
     override suspend fun close() = withContext(Dispatchers.IO) {
         if (closed.compareAndSet(false, true)) {
-            readerJob.cancel()
-            sessionScope.cancel()
+            // 先终止子进程：子进程退出会关闭 slave 端，使 reader 阻塞中的 readFd 返回 EOF
+            // 而自然退出——这是在不改 JNI 阻塞读语义的前提下，解开「reader 仍持 masterFd 时
+            // 就 closeFd」竞态的唯一手段（贸然先 closeFd 可能让该 fd 编号被复用到别处）。
             // 探活防止 PID 复用后误杀无关进程；SIGHUP + grace + SIGKILL 让 shell 优雅退出
             if (NativePty.killPid(childPid, 0) == 0) {
                 NativePty.killPid(childPid, 1) // SIGHUP
@@ -151,8 +153,11 @@ class NativePtySession(
                 }
                 NativePty.waitPid(childPid)
             }
+            // 有界等待 reader 退出，确保确认没有线程再使用 masterFd 之后才 closeFd。
+            withTimeoutOrNull(READER_JOIN_TIMEOUT_MS) { readerJob.join() }
             NativePty.closeFd(masterFd)
             outputChannel.close()
+            sessionScope.cancel()
             runCatching { cleanupCallback() }
         }
     }
@@ -160,5 +165,7 @@ class NativePtySession(
     companion object {
         // 输出缓冲：~8KB/帧 × 1024 ≈ 8MB 上限，配合 send 背压可在高负载下不丢数据。
         const val OUTPUT_BUFFER_CAPACITY = 1024
+        /** close() 等待 reader 退出的上限；子进程已死时读取应立即返回 EOF，正常为毫秒级。 */
+        private const val READER_JOIN_TIMEOUT_MS = 1_000L
     }
 }

@@ -20,6 +20,8 @@ import top.wkbin.tianxuan.core.database.AppDatabase
 import top.wkbin.tianxuan.core.database.HarnessRuntimeDao
 import top.wkbin.tianxuan.core.database.HarnessRuntimeRepository
 import top.wkbin.tianxuan.core.database.HarnessLaneResultEntity
+import top.wkbin.tianxuan.core.common.logging.AppLogger
+import top.wkbin.tianxuan.core.common.logging.SensitiveDataRedactor
 import top.wkbin.tianxuan.core.database.RoomHarnessRuntimeRepository
 import top.wkbin.tianxuan.harness.AssistantText
 import top.wkbin.tianxuan.harness.ToolCall
@@ -30,6 +32,7 @@ import top.wkbin.tianxuan.harness.operation.OperationCoordinator
 import top.wkbin.tianxuan.harness.operation.OperationPhase
 import top.wkbin.tianxuan.harness.operation.OperationStatus
 import top.wkbin.tianxuan.harness.operation.ReplayPolicy
+import top.wkbin.tianxuan.harness.session.SessionTreeStore
 
 /**
  * 崩溃恢复集成测试：真实 Room 持久化 + OperationCoordinator + RecoveryManager 全链路。
@@ -43,6 +46,7 @@ class HarnessRecoveryIntegrationTest {
     private lateinit var database: AppDatabase
     private lateinit var repository: HarnessRuntimeRepository
     private lateinit var eventBus: HarnessEventBus
+    private lateinit var store: SessionTreeStore
     private lateinit var coordinator: OperationCoordinator
     private lateinit var recoveryManager: RecoveryManager
 
@@ -54,6 +58,7 @@ class HarnessRecoveryIntegrationTest {
             .build()
         repository = RoomHarnessRuntimeRepository(database.harnessRuntimeDao())
         eventBus = HarnessEventBus()
+        store = SessionTreeStore(repository, Json, AppLogger(context, SensitiveDataRedactor { it }))
         rebuildRuntime()
     }
 
@@ -65,7 +70,7 @@ class HarnessRecoveryIntegrationTest {
     /** 模拟进程重启：一切内存对象丢弃，仅数据库保留。 */
     private fun rebuildRuntime() {
         coordinator = OperationCoordinator(repository, Json, eventBus)
-        recoveryManager = RecoveryManager(repository, coordinator, approvalRepository = null, json = Json, eventBus = eventBus)
+        recoveryManager = RecoveryManager(repository, coordinator, approvalRepository = null, json = Json, messageStore = store, eventBus = eventBus)
     }
 
     private fun user(text: String) = UserMessage(id = "u-$text", createdAt = 1L, text = text)

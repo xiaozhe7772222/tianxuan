@@ -171,7 +171,9 @@ class SkillRegistry(
     private suspend fun collect(options: SkillViewOptions): CollectResult {
         val key = collectCacheKey(options.cwd, options.scope, revision.get())
         collectCache[key]?.let {
-            // 每次尝试最多 2 次（对齐 DSH MAX_COLLECT_ATTEMPTS）
+            // 每次尝试最多 2 次（对齐 DSH MAX_COLLECT_ATTEMPTS）：修订号在两次读取之间
+            // 可能被改写，需按最新修订号重查一次缓存。原先 attempt 从不自增、两个分支
+            // 都无条件 return，重试形同虚设。
             var attempt = 1
             while (attempt <= MAX_COLLECT_ATTEMPTS) {
                 val currentRevision = revision.get()
@@ -179,8 +181,9 @@ class SkillRegistry(
                 if (current != null) {
                     return CollectResult(current, cacheable = true)
                 }
-                return collectFresh(options)
+                attempt += 1
             }
+            return collectFresh(options)
         }
         return collectFresh(options)
     }

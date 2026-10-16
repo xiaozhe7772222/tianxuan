@@ -133,7 +133,10 @@ class KnowledgeManager(
         }
 
         return withContext(Dispatchers.Default) {
-            if (queryVector != null) {
+            // 只有存在已嵌入 chunk 时才走向量分支；否则（库中尚无嵌入，或全部嵌入失败）
+            // 必须落到 BM25，否则 queryVector 命中而 allChunks 为空时返回空列表——
+            // 即上面算好的 chunksToSearch 兜底被白白绕过，表现为"检索静默无结果"。
+            if (queryVector != null && allChunks.isNotEmpty()) {
                 // 向量余弦相似度
                 allChunks.asSequence()
                     .mapNotNull { chunk ->

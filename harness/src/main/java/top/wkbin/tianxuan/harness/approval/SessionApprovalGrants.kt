@@ -42,7 +42,9 @@ class SessionApprovalGrants() {
     fun grant(sessionId: String, toolName: String, argumentsJson: String, riskLevel: String = "normal") {
         if (sessionId.isBlank() || !isRememberableRisk(riskLevel)) return
         val key = grantKey(toolName, argumentsJson) ?: return
-        val sessionGrants = grants.getOrPut(sessionId) { LinkedHashMap() }
+        // computeIfAbsent 原子；getOrPut 是 get-then-put，并发首次授权同一会话会各建一个
+        // map 并互相覆盖（丢授权），isGranted 也可能读到被替换掉的空表。
+        val sessionGrants = grants.computeIfAbsent(sessionId) { LinkedHashMap() }
         synchronized(sessionGrants) {
             sessionGrants.remove(key)
             sessionGrants[key] = System.currentTimeMillis()

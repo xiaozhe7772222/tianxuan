@@ -20,7 +20,7 @@ class McpOAuthTokenProvider(
         if (expiresAt == null || expiresAt > System.currentTimeMillis() + EXPIRY_SKEW_MS) {
             return credential.accessToken
         }
-        return refreshLocks.getOrPut(server.id) { kotlinx.coroutines.sync.Mutex() }.withLock {
+        return refreshLocks.computeIfAbsent(server.id) { kotlinx.coroutines.sync.Mutex() }.withLock {
             val latest = credentials.credential(server.id) ?: return@withLock null
             val latestExpiresAt = latest.expiresAt
             if (latestExpiresAt == null || latestExpiresAt > System.currentTimeMillis() + EXPIRY_SKEW_MS) {

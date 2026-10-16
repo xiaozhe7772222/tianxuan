@@ -246,7 +246,7 @@ class AndroidFtpServerTest {
     fun `handles file upload, directory creation, rename, and deletion`() {
         val root = tempFolder.newFolder("rootfs")
         val port = freePort()
-        val server = AndroidFtpServer(FtpServerConfig(port = port, rootDirectory = root, anonymousEnabled = true))
+        val server = AndroidFtpServer(FtpServerConfig(port = port, rootDirectory = root, username = "root", password = "secretpassword"))
         server.start()
 
         try {
@@ -256,12 +256,13 @@ class AndroidFtpServerTest {
                 val writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8))
 
                 reader.readLine()
-                writer.write("USER anonymous\r\n")
+                writer.write("USER root\r\n")
                 writer.flush()
                 reader.readLine()
-                writer.write("PASS guest@\r\n")
+                writer.write("PASS secretpassword\r\n")
                 writer.flush()
-                reader.readLine()
+                // 写操作（MKD/STOR/RNFR/DELE）要求真实账号认证：匿名会话现在是只读的。
+                assertEquals("230 User logged in, proceed.", reader.readLine())
 
                 // MKD newdir
                 writer.write("MKD myfolder\r\n")
@@ -423,6 +424,32 @@ class AndroidFtpServerTest {
             }
         } finally {
             server2.stop()
+        }
+    }
+
+    /** 免密入口不得把 rootfs 写入能力暴露给局域网：匿名会话强制只读。 */
+    @Test
+    fun `anonymous sessions are read-only`() {
+        val root = tempFolder.newFolder("rootfs")
+        val port = freePort()
+        val server = AndroidFtpServer(FtpServerConfig(port = port, rootDirectory = root, anonymousEnabled = true, username = "root", password = "secretpassword"))
+        server.start()
+        try {
+            Socket("127.0.0.1", port).use { socket ->
+                socket.soTimeout = 5000
+                val reader = BufferedReader(InputStreamReader(socket.getInputStream(), Charsets.UTF_8))
+                val writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8))
+                reader.readLine()
+                writer.write("USER anonymous\r\n"); writer.flush(); reader.readLine()
+                writer.write("PASS guest@\r\n"); writer.flush(); reader.readLine()
+                writer.write("MKD nope\r\n"); writer.flush()
+                assertTrue(reader.readLine().startsWith("550 "))
+                assertFalse(File(root, "nope").exists())
+                writer.write("STOR nope.txt\r\n"); writer.flush()
+                assertTrue(reader.readLine().startsWith("550 "))
+            }
+        } finally {
+            server.stop()
         }
     }
 

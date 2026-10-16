@@ -207,7 +207,7 @@ class McpManager(
         val bound = boundConfig(server)
         val fingerprint = fingerprint(bound)
         cache[server.id]?.takeIf { it.fingerprint == fingerprint }?.tools
-            ?: discoveryMutexes.getOrPut(server.id) { Mutex() }.withLock {
+            ?: discoveryMutexes.computeIfAbsent(server.id) { Mutex() }.withLock {
                 cache[server.id]?.takeIf { it.fingerprint == fingerprint }?.tools
                     ?.let { return@withLock it }
                 // 退避窗口内直接跳过：持续故障的服务不该在每轮对话和每次

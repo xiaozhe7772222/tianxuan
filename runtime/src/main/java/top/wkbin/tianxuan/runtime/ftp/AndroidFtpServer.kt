@@ -33,7 +33,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Configuration options for [AndroidFtpServer]. */
 data class FtpServerConfig(
     val port: Int = 2121,
     val rootDirectory: File,
@@ -121,7 +120,6 @@ class AndroidFtpServer(
                 try {
                     Thread.sleep(delays[attempt])
                 } catch (_: InterruptedException) {
-                    // Ignore interruption and proceed with attempt
                 }
             }
             var s: ServerSocket? = null
@@ -176,6 +174,7 @@ internal class FtpSession(
     private val writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8))
 
     private var authenticated = false
+    private var anonymous = false // 匿名会话强制只读，避免免密入口向局域网暴露 rootfs 写入
     private var usernameAttempt: String? = null
     private var currentVirtualDir: String = "/"
     private var transferType: String = "I" // Binary default
@@ -287,20 +286,20 @@ internal class FtpSession(
         val user = usernameAttempt?.ifBlank { null } ?: config.username.ifBlank { "root" }
         if (config.anonymousEnabled && (user.equals("anonymous", ignoreCase = true) || user.equals("ftp", ignoreCase = true))) {
             authenticated = true
+            anonymous = true
             sendResponse(230, "Anonymous access granted.")
             onLog("[$clientIp] 匿名登录成功")
             return
         }
 
         val expectedUser = config.username.ifBlank { "root" }
-        // 口令未设置(null/blank)必须拒绝一切密码登录：此前 `isNullOrBlank() ||` 直接放行，
-        // 等于向局域网开放无密码 rootfs；免密访问只有 anonymousEnabled 一个显式入口。
-        // 为何不用 `==`（计时旁路信道）、为何移除 `user.equals("root")` 后备：见 FtpCredentialVerifier 的 KDoc。
+        // 口令未设置(null/blank)一律拒绝密码登录（否则等于向局域网开放无密码 rootfs）；免密仅 anonymousEnabled 一个入口，`==`/root 后备取舍见 FtpCredentialVerifier。
         val userMatches = user.equals(expectedUser, ignoreCase = true)
         val passwordMatches = FtpCredentialVerifier.passwordMatches(pass, config.password)
 
         if (userMatches && passwordMatches) {
             authenticated = true
+            anonymous = false
             sendResponse(230, "User logged in, proceed.")
             onLog("[$clientIp] 用户 $user 认证成功")
         } else {
@@ -700,7 +699,7 @@ internal class FtpSession(
 
     private fun handleStor(arg: String, append: Boolean) {
         if (!requireAuth()) return
-        if (config.readOnly) {
+        if (config.readOnly || anonymous) {
             sendResponse(550, "Permission denied: Server is in read-only mode.")
             return
         }
@@ -746,7 +745,7 @@ internal class FtpSession(
 
     private fun handleDele(arg: String) {
         if (!requireAuth()) return
-        if (config.readOnly) {
+        if (config.readOnly || anonymous) {
             sendResponse(550, "Permission denied: Server is in read-only mode.")
             return
         }
@@ -766,13 +765,14 @@ internal class FtpSession(
 
     private fun handleMkd(arg: String) {
         if (!requireAuth()) return
-        if (config.readOnly) {
+        if (config.readOnly || anonymous) {
             sendResponse(550, "Permission denied: Server is in read-only mode.")
             return
         }
         val targetVirtual = resolveVirtualPath(currentVirtualDir, arg)
         val file = resolveFile(targetVirtual)
-        if (file != null && !file.exists() && file.mkdirs()) {
+        // RFC 959 的 MKD 只建单级目录，故用 mkdir（mkdirs 会顺带建多级，放大越权建目录）
+        if (file != null && !file.exists() && file.mkdir()) {
             sendResponse(257, "\"$targetVirtual\" directory created.")
             onLog("[$clientIp] 创建目录: $targetVirtual")
         } else {
@@ -782,7 +782,7 @@ internal class FtpSession(
 
     private fun handleRmd(arg: String) {
         if (!requireAuth()) return
-        if (config.readOnly) {
+        if (config.readOnly || anonymous) {
             sendResponse(550, "Permission denied: Server is in read-only mode.")
             return
         }
@@ -806,7 +806,7 @@ internal class FtpSession(
 
     private fun handleRnfr(arg: String) {
         if (!requireAuth()) return
-        if (config.readOnly) {
+        if (config.readOnly || anonymous) {
             sendResponse(550, "Permission denied: Server is in read-only mode.")
             return
         }
@@ -823,7 +823,7 @@ internal class FtpSession(
 
     private fun handleRnto(arg: String) {
         if (!requireAuth()) return
-        if (config.readOnly) {
+        if (config.readOnly || anonymous) {
             sendResponse(550, "Permission denied: Server is in read-only mode.")
             return
         }
