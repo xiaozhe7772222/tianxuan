@@ -317,15 +317,9 @@ internal fun BranchBrowserSheet(
                     BranchCard(branch, enabled = !running && !branch.isBusy, onClick = { onSwitch(branch) })
                 }
                 if (subagents.isNotEmpty()) {
-                    item(key = "branch_sheet_subagent_header") {
-                        SectionLabel(stringResource(R.string.chat_subagent_lanes), subagents.size)
-                    }
-                    items(subagents, key = ::branchUiKey) { branch ->
-                        BranchCard(
-                            branch = branch,
-                            enabled = branch.laneName != null,
-                            onClick = { onOpenSubagent(branch) },
-                        )
+                    item(key = "branch_sheet_subagent_board") {
+                        // 子代理并行看板：实时状态（运行/异常/空闲）+ 步数，点击展开泳道
+                        SubagentFleetBoard(subagents, onOpenSubagent)
                     }
                 }
             }
