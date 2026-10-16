@@ -363,11 +363,8 @@ class ToolManager(
             .filter { it.toolId !in liveInstallTools }
             .forEach { task ->
                 val taskDistro = task.distroId
-                installTransactionManager.recover(
-                    distroId = taskDistro,
-                    toolId = task.toolId,
-                    preserveExisting = task.operation == OPERATION_UPDATE,
-                )
+                // 单条恢复失败不得中断整轮同步（否则后续清理孤儿/清单 upsert 都不执行）→ 逐条兜底
+                runCatching { installTransactionManager.recover(taskDistro, task.toolId, task.operation == OPERATION_UPDATE) }
                 installTaskRepository.upsert(
                     task.copy(
                         state = TASK_INTERRUPTED,
