@@ -20,19 +20,29 @@ class WorkflowApprovalBroker() {
     val currentRequest: StateFlow<WorkflowApprovalRequest?> = _currentRequest.asStateFlow()
 
     fun currentRequestFor(executionId: String): StateFlow<WorkflowApprovalRequest?> =
-        requestsByExecution.getOrPut(executionId) { MutableStateFlow(null) }
+        requestsByExecution.computeIfAbsent(executionId) { MutableStateFlow(null) }
 
     suspend fun await(request: WorkflowApprovalRequest): WorkflowApprovalDecision {
         val key = key(request.executionId, request.nodeId)
         val deferred = CompletableDeferred<WorkflowApprovalDecision>()
-        synchronized(waiting) {
-            check(key !in waiting) { "审批请求已存在：$key" }
-            waiting[key] = request to deferred
-            requestsByExecution.getOrPut(request.executionId) { MutableStateFlow(null) }.value = request
-            _currentRequest.value = waiting.values.firstOrNull()?.first
+        var owner = false
+        val target = synchronized(waiting) {
+            val existing = waiting[key]
+            if (existing != null) {
+                // 幂等：同一 (executionId,nodeId) 被重复调度/重试时复用既有等待，
+                // 而不是抛 IllegalStateException 让 run 协程崩溃。
+                existing.second
+            } else {
+                owner = true
+                waiting[key] = request to deferred
+                requestsByExecution.computeIfAbsent(request.executionId) { MutableStateFlow(null) }.value = request
+                _currentRequest.value = waiting.values.firstOrNull()?.first
+                deferred
+            }
         }
+        if (!owner) return target.await()
         return try {
-            deferred.await()
+            target.await()
         } finally {
             synchronized(waiting) {
                 waiting.remove(key)

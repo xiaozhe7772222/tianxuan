@@ -829,7 +829,7 @@ internal fun RuntimeTimelineSheet(
                 }
 
                 // 最新一轮在最上，组内按发生顺序链式展示；轮间以分隔线区隔。
-                items(rounds.asReversed()) { round ->
+                items(rounds.asReversed(), key = { it.key }) { round ->
                     RoundSection(round, onNavigateToMessage)
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),

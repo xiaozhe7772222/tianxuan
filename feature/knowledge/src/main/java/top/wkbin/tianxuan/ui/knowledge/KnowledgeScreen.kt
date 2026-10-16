@@ -36,7 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,15 +59,15 @@ fun KnowledgeScreen(
     onBack: () -> Unit,
     viewModel: KnowledgeViewModel = koinViewModel(),
 ) {
-    val documents by viewModel.documents.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
-    val searchResults by viewModel.searchResults.collectAsState()
-    val searching by viewModel.searching.collectAsState()
-    val error by viewModel.error.collectAsState()
-    val adding by viewModel.adding.collectAsState()
-    val reEmbedding by viewModel.reEmbedding.collectAsState()
-    val embeddingModel by viewModel.embeddingModel.collectAsState()
-    val embeddingEndpointSuffix by viewModel.embeddingEndpointSuffix.collectAsState()
+    val documents by viewModel.documents.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
+    val searching by viewModel.searching.collectAsStateWithLifecycle()
+    val error by viewModel.error.collectAsStateWithLifecycle()
+    val adding by viewModel.adding.collectAsStateWithLifecycle()
+    val reEmbedding by viewModel.reEmbedding.collectAsStateWithLifecycle()
+    val embeddingModel by viewModel.embeddingModel.collectAsStateWithLifecycle()
+    val embeddingEndpointSuffix by viewModel.embeddingEndpointSuffix.collectAsStateWithLifecycle()
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf<KbDocumentEntity?>(null) }

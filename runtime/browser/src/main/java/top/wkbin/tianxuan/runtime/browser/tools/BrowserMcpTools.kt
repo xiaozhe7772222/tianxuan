@@ -192,18 +192,18 @@ class BrowserMcpTools(
         return BrowserSessionToken(tabId = normalized, family = engine.family)
     }
 
-    /** URL 清洗：剥离首尾空白与反引号，并拒绝 javascript:/data: 等可执行 scheme。 */
+    /** URL 清洗：剥离首尾空白与反引号；按 scheme 白名单拒绝 javascript:/data:/file: 等可执行 scheme。 */
     private fun sanitizeUrl(raw: String?): String {
         val trimmed = raw?.trim()?.trim('`')?.trim().orEmpty()
         if (trimmed.isEmpty()) return ""
-        val lower = trimmed.lowercase()
-        // 仅允许 http/https/about/blob，拒绝 javascript:/data:/file: 等可执行 scheme
-        val allowedSchemes = listOf("http://", "https://", "about:", "blob:", "http%3a", "https%3a")
-        return if (allowedSchemes.any { lower.startsWith(it) } || (!lower.contains("://") && !lower.startsWith("about:"))) {
-            trimmed
-        } else {
-            ""
-        }
+        val colon = trimmed.indexOf(':')
+        if (colon < 0) return trimmed // 无 scheme（相对路径/锚点）：放行，交页面自身解析
+        val scheme = trimmed.substring(0, colon).lowercase()
+        val looksLikeScheme = scheme.isNotEmpty() && scheme.first().isLetter() &&
+            scheme.all { it.isLetterOrDigit() || it in "+-." }
+        // 仅允许 http/https/about/blob；不是合法 scheme 形态的冒号（如 http%3a、javascript%3a）
+        // 也一律拒绝，避免用百分号编码绕过白名单。
+        return if (looksLikeScheme && scheme in setOf("http", "https", "about", "blob")) trimmed else ""
     }
 
     private fun pickEngine(token: BrowserSessionToken): BrowserEngine? {

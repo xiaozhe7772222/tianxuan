@@ -66,7 +66,8 @@ fun SubagentCard(
     onOpenSubagent: ((ConversationBranch) -> Unit)? = null,
     onViewDetails: (() -> Unit)? = null,
 ) {
-    var expanded by remember { mutableStateOf(result != null) }
+    // 带 key：结果到达后自动展开（原 remember{} 只在首帧取值，结果到达时不会展开）。
+    var expanded by remember(result != null) { mutableStateOf(result != null) }
     val rotationState by animateFloatAsState(targetValue = if (expanded) 180f else 0f, label = "arrow_anim")
 
     val defaultTaskName = stringResource(R.string.chat_subtask)

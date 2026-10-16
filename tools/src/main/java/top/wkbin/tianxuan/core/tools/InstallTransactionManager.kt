@@ -46,7 +46,9 @@ class InstallTransactionManager(
         val transactionRoot = File(pathManager.tianxuanRootDir(safeDistro), ".transactions")
         val candidates = transactionRoot.listFiles()
             .orEmpty()
-            .filter { it.name.startsWith("$toolId-") }
+            // 快照名形如 "$toolId-$nanoTime"；用「去掉末尾 -数字」还原完整 toolId 再比较，
+            // 避免 startsWith 把 `git-lfs-…` 误判为 `git` 的快照。
+            .filter { it.name.substringBeforeLast("-", it.name) == toolId }
             .sortedByDescending { it.lastModified() }
         val target = File(pathManager.tianxuanToolsDir(safeDistro), toolId)
         if (preserveExisting && candidates.isNotEmpty()) {
@@ -74,7 +76,8 @@ class InstallTransactionManager(
             File(pathManager.tianxuanRootDir(safeDistro), ".transactions")
                 .listFiles()
                 .orEmpty()
-                .filter { file -> activeToolIds.none { file.name.startsWith("$it-") } }
+                // 同样按「去掉末尾 -数字」还原 toolId 比较，避免互为前缀的 id 误判活跃而漏清孤儿
+                .filter { file -> file.name.substringBeforeLast("-", file.name) !in activeToolIds }
                 .forEach { safeDelete(it, "cleanupOrphans($safeDistro)") }
         }
     }

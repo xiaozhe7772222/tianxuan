@@ -298,12 +298,19 @@ class HostGuiToolkit(
         return null
     }
 
-    /** Android input text 约定：空格写成 %s；特殊 shell 元字符加反斜杠；不加外层引号。 */
+    /**
+     * Android `input text` 约定：空格写成 %s；shell 元字符加反斜杠；不加外层引号。
+     *
+     * 安全关键：该转义结果会被拼进 `su -c` 执行的命令串，因此必须覆盖**全部** shell
+     * 元字符，并**丢弃控制字符**（\n/\r/\t 等）——换行会把命令截断成第二条指令，
+     * 等于把模型/用户传入的文本变成 root 命令注入。`input text` 本身也无法输入这些字符。
+     */
     private fun escapeForInputText(text: String): String = buildString(text.length * 2) {
         for (ch in text) {
-            when (ch) {
-                ' ' -> append("%s")
-                '\\', '"', '\'', '`', '$', '&', '<', '>', '|', ';', '(', ')', '#' -> {
+            when {
+                ch.code < 0x20 || ch.code == 0x7F -> Unit // 丢弃控制字符（含 \n/\r/\t）
+                ch == ' ' -> append("%s")
+                ch in "\\\"'`$&<>|;()#*?[]{}!~^" -> {
                     append('\\')
                     append(ch)
                 }

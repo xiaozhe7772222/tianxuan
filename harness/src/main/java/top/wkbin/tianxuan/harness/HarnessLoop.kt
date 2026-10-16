@@ -195,7 +195,7 @@ class HarnessLoop(
     val queuedPrompts: StateFlow<List<QueuedPrompt>> = _queuedPrompts.asStateFlow()
 
     private fun getOrCreatePendingFlow(sessId: String): MutableStateFlow<List<PendingMessage>> {
-        return _sessionPendingMessages.getOrPut(sessId) { MutableStateFlow(emptyList()) }
+        return _sessionPendingMessages.computeIfAbsent(sessId) { MutableStateFlow(emptyList()) }
     }
 
     private fun isSessionBusy(sessId: String): Boolean =
@@ -765,7 +765,7 @@ class HarnessLoop(
         loopScope.launch {
             val job = turnCoordinator.withSessionMutex(sessId) {
                 cancellingSessions += sessId
-                sessionCancelEpochs.getOrPut(sessId) { AtomicLong() }.incrementAndGet()
+                sessionCancelEpochs.computeIfAbsent(sessId) { AtomicLong() }.incrementAndGet()
                 val queuedTaskIds = promptQueueManager.list(sessId, PromptQueue.NEXT_RUN)
                     .mapNotNull { it.second.taskId }
                 PromptQueue.entries.forEach { promptQueueManager.clear(sessId, it) }
@@ -916,7 +916,7 @@ class HarnessLoop(
             logger.w("Durable task $taskId could not claim RUNNING; session launch skipped")
             return
         }
-        val epoch = sessionCancelEpochs.getOrPut(sessId) { AtomicLong() }.get()
+        val epoch = sessionCancelEpochs.computeIfAbsent(sessId) { AtomicLong() }.get()
         val job = loopScope.launch(start = CoroutineStart.LAZY) {
             executeSessionRun(sessId, epoch, taskId, priority, block)
         }
@@ -1198,7 +1198,7 @@ class HarnessLoop(
         // 死循环拦截器在每次运行入口重置：regenerateLast / retryToolCall / activateBranch
         // 直接进入本函数，不重置会带着上一轮的失败连击——用户点"重试工具调用"重新发起的
         // 同一调用会立即命中 sameFailedStreak >= 2 被误杀，重试功能在最该生效时失效。
-        sessionLoopDetectors.getOrPut(sessId) { ToolCallLoopDetector() }.reset()
+        sessionLoopDetectors.computeIfAbsent(sessId) { ToolCallLoopDetector() }.reset()
         // Phase 0 基线埋点：每次运行汇总过程指标并写入 Agent 日志（不受日志开关影响），
         // 为"自主完成率 / 自恢复率 / 人工干预次数"等 2.0 目标指标提供 1.0 真实基线。
         val metrics = RunMetrics(startedAt = startedAt)
@@ -1364,7 +1364,7 @@ class HarnessLoop(
                     toolRoundRunner.executeToolCalls(
                         sessId = sessId,
                         specs = effectiveCalls,
-                        loopDetector = sessionLoopDetectors.getOrPut(sessId) { ToolCallLoopDetector() },
+                        loopDetector = sessionLoopDetectors.computeIfAbsent(sessId) { ToolCallLoopDetector() },
                         reasoning = result.reasoningContent,
                         sessionWorkspace = sessionWorkspace,
                         autoCwd = autoCwd,

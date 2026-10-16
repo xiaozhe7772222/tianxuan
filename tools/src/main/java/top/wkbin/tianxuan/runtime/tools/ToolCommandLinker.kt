@@ -53,7 +53,8 @@ class ToolCommandLinker(
         )
     }
 
-    private fun shellQuote(value: String): String = "'${value.replace("'", "'\\\"'\\\"'")}'"
+    // 单引号折叠用标准 `'\''`；旧实现 `'\"'` 拼出的引号不闭合（含 ' 的值会导致 shell 语法错误）。
+    private fun shellQuote(value: String): String = "'${value.replace("'", "'\\''")}'"
 
     private companion object {
         val SAFE_NAME = Regex("[a-z0-9][a-z0-9._+-]{0,63}")

@@ -320,7 +320,7 @@ class SubagentOrchestrator(
             )
         }
         val laneLockKey = "$parentSessionId::$laneName"
-        val laneLock = resumeLaneLocks.getOrPut(laneLockKey) { Mutex() }
+        val laneLock = resumeLaneLocks.computeIfAbsent(laneLockKey) { Mutex() }
         if (!laneLock.tryLock()) {
             return SubagentExecutionOutcome(
                 spec = spec,

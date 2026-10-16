@@ -71,8 +71,9 @@ class SkillPackageParser {
                 }
 
                 val name = entry.name.replace('\\', '/')
-                // 防御 Zip Slip 路径穿越
-                if (name.contains("../") || name.startsWith("/") || name.contains("/../")) {
+                // 防御 Zip Slip：拒绝绝对路径与**任何** `..` 段（旧写法只拦 `../` / `/../`，
+                // 会放行条目名恰为 `..` 或 `a/..` 这类，弱于下游 canonical 校验）。
+                if (name.startsWith("/") || name.split('/').any { it == ".." }) {
                     throw SecurityException("检测到非法的 Zip Slip 路径穿越攻击: $name")
                 }
 

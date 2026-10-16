@@ -14,19 +14,19 @@ object CronScheduler {
     /** 从当前时间起，下一次满足 cron 表达式的时刻（epoch millis）。无未来匹配时返回 null。 */
     fun nextOccurrence(cronExpression: String, fromMillis: Long = System.currentTimeMillis()): Long? {
         val fields = parseCron(cronExpression) ?: return null
-        val cal = Calendar.getInstance().apply { timeInMillis = fromMillis }
-        // 从下一分钟开始找
-        cal.add(Calendar.MINUTE, 1)
-        cal.set(Calendar.SECOND, 0)
-        cal.set(Calendar.MILLISECOND, 0)
-        // 400 年地平线防无限扫描
-        val horizon = cal.clone() as Calendar
-        horizon.add(Calendar.YEAR, 400)
-        val horizonMillis = horizon.timeInMillis
-        var probe = cal.timeInMillis
-        while (probe < horizonMillis) {
-            if (matches(fields, probe)) return probe
-            probe += 60_000L
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = fromMillis
+            add(Calendar.MINUTE, 1) // 从下一分钟开始找
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        // 地平线 5 年（≈2.6M 分钟）：足以覆盖 2/29 这类最稀有的合法组合，同时避免
+        // “2 月 31 日”这类永不匹配的表达式把逐分钟扫描拖到 400 年（≈2 亿次而近乎挂死）。
+        // 复用同一个 Calendar，省去每步 Calendar.getInstance() 的开销。
+        val maxSteps = 5 * 366 * 24 * 60
+        for (step in 0 until maxSteps) {
+            if (matches(fields, cal)) return cal.timeInMillis
+            cal.add(Calendar.MINUTE, 1)
         }
         return null
     }
@@ -64,6 +64,8 @@ object CronScheduler {
             if (stepMatch != null) {
                 val rangePart = stepMatch.groupValues[1]
                 val step = stepMatch.groupValues[2].toInt()
+                // 步长为 0（如 `*/0`）会让下面的 while 永不前进 → 死循环拖死调用方；判为无效表达式。
+                require(step > 0) { "cron 步长必须为正：$field" }
                 val (start, end) = if (rangePart == "*") min to max
                 else rangePart.split('-').let { it[0].toInt() to (it.getOrNull(1)?.toInt() ?: max) }
                 var i = start
@@ -78,11 +80,14 @@ object CronScheduler {
                 result += part.toInt()
             }
         }
-        return result.filter { it in min..max }.takeIf { it.isNotEmpty() }?.toSet()
+        // 越界/反向区间/空集一律判为**无效表达式**（抛错 → parseCron 返回 null），绝不降级为
+        // 通配 `*`——否则 `60 * * * *` 之类错误写法会静默变成“每分钟触发”，频率远超预期。
+        val valid = result.filter { it in min..max }
+        require(valid.isNotEmpty()) { "cron 字段无有效取值：$field" }
+        return valid.toSet()
     }
 
-    private fun matches(fields: CronFields, millis: Long): Boolean {
-        val cal = Calendar.getInstance().apply { timeInMillis = millis }
+    private fun matches(fields: CronFields, cal: Calendar): Boolean {
         val minute = cal.get(Calendar.MINUTE)
         val hour = cal.get(Calendar.HOUR_OF_DAY)
         val dom = cal.get(Calendar.DAY_OF_MONTH)

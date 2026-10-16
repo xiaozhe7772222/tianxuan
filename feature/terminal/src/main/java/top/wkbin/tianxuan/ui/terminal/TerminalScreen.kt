@@ -124,10 +124,10 @@ fun TerminalScreen(
     val bridge = remember(context) {
         TianXuanTerminalBridge(context, viewModel.sessionClientRouter)
     }
-    // Attach before AndroidView layout so the first PTY callbacks aren't dropped.
-    bridge.attachToRouter()
-
     DisposableEffect(bridge) {
+        // 副作用必须放在 DisposableEffect：原在组合体内无条件 attachToRouter()，
+        // 每次重组都会重复 router.attach(this)。attach 需早于 AndroidView 布局以免丢首个 PTY 回调。
+        bridge.attachToRouter()
         bridge.onFontScale = { increase ->
             fontSizeSp = (fontSizeSp + if (increase) 1f else -1f)
                 .coerceIn(MIN_TERMINAL_FONT_SIZE_SP, MAX_TERMINAL_FONT_SIZE_SP)

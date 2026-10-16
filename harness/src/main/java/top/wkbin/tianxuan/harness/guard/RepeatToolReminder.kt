@@ -44,6 +44,7 @@ class RepeatToolReminder(
      * @param argsJson 工具参数 JSON 字符串
      * @return 需要注入提醒时返回提醒文本；否则返回 null
      */
+    @Synchronized
     fun check(sessionId: String, tool: HarnessTool, argsJson: String): String? {
         val toolName = tool.name.lowercase()
 
@@ -77,6 +78,7 @@ class RepeatToolReminder(
     /**
      * 重置一个会话的重复计数（新轮次开始时调用）。
      */
+    @Synchronized
     fun reset(sessionId: String) {
         sessions.remove(sessionId)
     }

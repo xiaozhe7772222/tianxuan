@@ -271,6 +271,11 @@ private class StreamWsConnection(
 
     private fun handleFrames(frames: List<WsFrameCodec.Frame>) {
         for (f in frames) {
+            // 防御未 FIN 的连续分片把 textBuffer 无限撑大（OOM）：超限直接断开连接。
+            if (textBuffer.size() > 8 * 1024 * 1024) {
+                finish(IOException("CDP text frame exceeds 8MiB"))
+                return
+            }
             when (f.opcode) {
                 WsFrameCodec.OP_TEXT -> {
                     textBuffer.write(f.payload)

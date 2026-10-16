@@ -52,6 +52,9 @@ class NativePtySession(
 
     private val outputChannel = Channel<TerminalOutput>(OUTPUT_BUFFER_CAPACITY)
     private val closed = AtomicBoolean(false)
+
+    /** 子进程只 reap 一次：PID 复用后再 waitpid 可能误收无关进程。 */
+    private val reaped = AtomicBoolean(false)
     private val sessionScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val utf8Decoder = IncrementalUtf8Decoder(8192)
 
@@ -81,7 +84,7 @@ class NativePtySession(
         decodeUtf8End().takeIf { it.isNotEmpty() }?.let {
             outputChannel.send(TerminalOutput(TerminalStream.STDOUT, it))
         }
-        NativePty.waitPid(childPid)
+        reapChild()
         outputChannel.close()
     }
 
@@ -91,6 +94,11 @@ class NativePtySession(
     }
 
     private fun decodeUtf8End(): String = utf8Decoder.finish()
+
+    /** 幂等收割子进程（reader 自然结束与 close() 都会调用，避免重复 waitpid）。 */
+    private fun reapChild() {
+        if (reaped.compareAndSet(false, true)) NativePty.waitPid(childPid)
+    }
 
     override val output: Flow<TerminalOutput> = outputChannel.receiveAsFlow()
 
@@ -151,7 +159,7 @@ class NativePtySession(
                 if (NativePty.killPid(childPid, 0) == 0) {
                     NativePty.killPid(childPid, 9) // SIGKILL 兜底
                 }
-                NativePty.waitPid(childPid)
+                reapChild()
             }
             // 有界等待 reader 退出，确保确认没有线程再使用 masterFd 之后才 closeFd。
             withTimeoutOrNull(READER_JOIN_TIMEOUT_MS) { readerJob.join() }

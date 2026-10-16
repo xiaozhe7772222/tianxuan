@@ -72,7 +72,9 @@ class RemoteScriptRunner(
         }
     }
 
-    private fun shellQuote(value: String): String = "'${value.replace("'", "'\\\"'\\\"'")}'"
+    // 单引号折叠必须用 `'\''`（而不是 `'\"'` 之类）：含 ' 的值会拼出未闭合引号 → shell 语法错误，
+    // 也可能被当成注入面。标准写法在单引号串里闭合、插入一个转义单引号、再重开单引号。
+    private fun shellQuote(value: String): String = "'${value.replace("'", "'\\''")}'"
 
     companion object {
         // 官方安装脚本需要 npm install / 下载二进制（OpenClaw 依赖较多，走代理
