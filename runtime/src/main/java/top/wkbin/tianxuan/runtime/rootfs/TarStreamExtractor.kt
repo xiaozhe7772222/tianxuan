@@ -357,9 +357,9 @@ class TarStreamExtractor internal constructor(
             skipPadding(input, 0)
             return ByteArray(0)
         }
-        require(size <= MAX_IN_MEMORY_ENTRY_SIZE) {
-            "Tar metadata entry exceeds $MAX_IN_MEMORY_ENTRY_SIZE bytes"
-        }
+        // 抛 IOException 而非 require()：非法元数据应与流异常同一失败语义（交由上层按损坏/恶意 tar 处理），
+        // 避免 IllegalArgumentException 冒泡成未处理崩溃
+        if (size > MAX_IN_MEMORY_ENTRY_SIZE) throw java.io.IOException("Tar metadata entry exceeds $MAX_IN_MEMORY_ENTRY_SIZE bytes")
         val bytes = ByteArray(size.toInt())
         var offset = 0
         while (offset < bytes.size) {

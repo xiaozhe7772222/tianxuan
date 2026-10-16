@@ -46,7 +46,11 @@ class AgentModelDiscovery(
             }
             .get().build()
         http.newCall(request).execute().use { response ->
-            val body = response.body.string()
+            // 限制响应体积：恶意/异常端点返回超大 body 会直接 OOM（对比 FileDownloader/ClawHubClient 均有上限）
+            if (response.body.contentLength() > 4L * 1024 * 1024) {
+                throw ModelDiscoveryResponseException("模型接口响应过大（${response.body.contentLength()} bytes）")
+            }
+            val body = response.peekBody(4L * 1024 * 1024).string()
             if (!response.isSuccessful) {
                 throw ModelDiscoveryResponseException("获取模型失败 HTTP ${response.code}：${body.take(200)}")
             }

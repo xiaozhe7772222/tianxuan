@@ -71,8 +71,9 @@ class ScreenshotRecorder(private val context: Context) {
         mainHandler.post {
             // WebView 无 isDestroyed API：视图已销毁时 measure/layout/draw 可能抛异常，整体兜底为 null
             val bmp: Bitmap? = try {
-                val w = preferredWidth ?: view.width.takeIf { it > 0 } ?: 1080
-                val h = preferredHeight ?: view.height.takeIf { it > 0 } ?: 1920
+                // 上限 4096 防超大入参 createBitmap OOM（此前直接用入参，无任何封顶）
+                val w = (preferredWidth ?: view.width.takeIf { it > 0 } ?: 1080).coerceIn(1, 4096)
+                val h = (preferredHeight ?: view.height.takeIf { it > 0 } ?: 1920).coerceIn(1, 4096)
                 // 离屏 / 从未 layout 的 WebView 先强制 measure+layout，避免软渲空白
                 if (view.width <= 0 || view.height <= 0) {
                     view.measure(

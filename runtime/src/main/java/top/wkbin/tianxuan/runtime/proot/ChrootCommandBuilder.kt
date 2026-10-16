@@ -57,6 +57,9 @@ class ChrootCommandBuilder {
 
             // 3. 用户自定义存储挂载
             mounts.forEach { m ->
+                // 与 ProotCommandBuilder 同口径：非法绑定直接跳过，避免把未经校验的宿主路径
+                // 拼进 root 级 mount --bind（本类此前缺少对等防线）
+                if (StorageMountBinding.validationError(m) != null) return@forEach
                 val src = m.hostPath
                 val dst = "$rootfs${m.guestPath}"
                 append("mkdir -p '$dst' 2>/dev/null; mount --bind '$src' '$dst' 2>/dev/null || true; ")
