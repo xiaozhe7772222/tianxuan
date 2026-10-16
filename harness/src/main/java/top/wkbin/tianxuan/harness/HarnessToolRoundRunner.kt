@@ -54,7 +54,11 @@ class HarnessToolRoundRunner(
                 sessId = sessId,
                 spec = spec,
                 tool = HarnessApiMapper.toolByName(spec.name),
-                args = buildJsonObject {},
+                // 保留丢弃调用的**真实参数**：原先恒填空对象，模型看到的是“参数被清空的调用”，
+                // 会据此误判调用内容。解析失败才退回空对象。
+                args = runCatching {
+                    kotlinx.serialization.json.Json.parseToJsonElement(spec.argumentsJson) as? JsonObject
+                }.getOrNull() ?: buildJsonObject {},
                 reasoning = reasoning,
                 rawToolName = spec.name.trim(),
                 output = "本回合工具调用数量（${allCalls.size}）超过单轮上限（$maxToolsPerRound），已跳过本次多余的 $dropped 个调用。" +

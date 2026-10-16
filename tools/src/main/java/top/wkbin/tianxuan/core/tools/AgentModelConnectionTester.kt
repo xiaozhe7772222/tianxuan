@@ -46,7 +46,9 @@ class AgentModelConnectionTester(private val http: OkHttpClient) {
             .get()
             .build()
         http.newCall(request).execute().use { response ->
-            val text = response.body.string()
+            // 限制响应体积：异常/恶意端点返回超大 body 会 OOM（错误信息只需前若干字符）
+            if (response.body.contentLength() > 2L * 1024 * 1024) throw IllegalStateException("连接测试响应过大")
+            val text = response.peekBody(2L * 1024 * 1024).string()
             check(response.isSuccessful) { "连接失败 HTTP ${response.code}：${text.take(240)}" }
         }
     }
@@ -58,7 +60,9 @@ class AgentModelConnectionTester(private val http: OkHttpClient) {
             .apply { if (!apiKey.isNullOrBlank()) header("Authorization", "Bearer $apiKey") }
             .post(body.toRequestBody("application/json".toMediaType())).build()
         http.newCall(request).execute().use { response ->
-            val text = response.body.string()
+            // 限制响应体积：异常/恶意端点返回超大 body 会 OOM（错误信息只需前若干字符）
+            if (response.body.contentLength() > 2L * 1024 * 1024) throw IllegalStateException("连接测试响应过大")
+            val text = response.peekBody(2L * 1024 * 1024).string()
             check(response.isSuccessful) { "连接失败 HTTP ${response.code}：${text.take(240)}" }
         }
     }
@@ -72,7 +76,9 @@ class AgentModelConnectionTester(private val http: OkHttpClient) {
             .apply { if (!apiKey.isNullOrBlank()) header("Authorization", "Bearer $apiKey") }
             .post(body.toRequestBody("application/json".toMediaType())).build()
         http.newCall(request).execute().use { response ->
-            val text = response.body.string()
+            // 限制响应体积：异常/恶意端点返回超大 body 会 OOM（错误信息只需前若干字符）
+            if (response.body.contentLength() > 2L * 1024 * 1024) throw IllegalStateException("连接测试响应过大")
+            val text = response.peekBody(2L * 1024 * 1024).string()
             check(response.isSuccessful) { "连接失败 HTTP ${response.code}：${text.take(240)}" }
         }
     }
@@ -85,7 +91,9 @@ class AgentModelConnectionTester(private val http: OkHttpClient) {
             .apply { if (!apiKey.isNullOrBlank()) header("x-api-key", apiKey) }
             .post(body.toRequestBody("application/json".toMediaType())).build()
         http.newCall(request).execute().use { response ->
-            val text = response.body.string()
+            // 限制响应体积：异常/恶意端点返回超大 body 会 OOM（错误信息只需前若干字符）
+            if (response.body.contentLength() > 2L * 1024 * 1024) throw IllegalStateException("连接测试响应过大")
+            val text = response.peekBody(2L * 1024 * 1024).string()
             check(response.isSuccessful) { "连接失败 HTTP ${response.code}：${text.take(240)}" }
         }
     }
