@@ -85,8 +85,8 @@ class SessionProjectionRegistry(
         var watermarkSeq: Long = -1
     }
 
-    private val definitions = mutableMapOf<String, ProjectionDefinition<*, *>>()
-    private val sessions = mutableMapOf<String, SessionProjections>()
+    private val definitions = java.util.concurrent.ConcurrentHashMap<String, ProjectionDefinition<*, *>>()
+    private val sessions = java.util.concurrent.ConcurrentHashMap<String, SessionProjections>()
 
     /**
      * 注册一个投影单元。

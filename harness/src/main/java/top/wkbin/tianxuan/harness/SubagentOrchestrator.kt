@@ -119,6 +119,34 @@ class SubagentOrchestrator(
         }
         val parentLeaf = laneManager.get(parentSessionId, "main")?.leafId
 
+        // 子代理谱系持久化（对齐 DSH SessionHeader.delegationDepth）：
+        // 子代理会话继承父会话的委派深度 + 1，并标记 origin=subagent 与 parentSessionId。
+        // childDepth 由 executeSubagents 传入（已由 DelegationDepthGuard 校验预算）。
+        for (spec in specs) {
+            val laneName = spec.taskId?.trim()?.takeIf { it.isNotBlank() }
+                ?: "subagent:${profileIndex.firstOrNull()?.id ?: "unknown"}:${java.util.UUID.randomUUID()}"
+            runCatching {
+                sessionDao.upsert(
+                    top.wkbin.tianxuan.core.database.HarnessSessionEntity(
+                        id = laneName,
+                        title = "子代理：${spec.taskName}",
+                        createdAt = System.currentTimeMillis(),
+                        updatedAt = System.currentTimeMillis(),
+                        modelId = modelId,
+                        modelVariant = modelVariant,
+                        workspace = workspace,
+                        projectType = "",
+                        approvalMode = parentSession?.approvalMode ?: "request",
+                        runMode = parentSession?.runMode ?: "build",
+                        parentSessionId = parentSessionId,
+                        isSeeded = false,
+                        origin = "subagent",
+                        delegationDepth = childDelegationDepth,
+                    ),
+                )
+            }
+        }
+
         // 写租约协调：把任务按 write_paths 冲突切成若干"写不冲突"的波。
         // 同一波内的写路径互不相交 → 可并行（受 globalParallelism 约束）；跨波顺序执行。
         // 未声明 writePaths 的任务为只读任务，可彼此并行；["*"] 才表示整工作区独占写租约。

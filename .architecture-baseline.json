@@ -88,7 +88,7 @@
         "harness/src/main/java/top/wkbin/tianxuan/harness/HarnessProviderRunner.kt": 674,
         "harness/src/main/java/top/wkbin/tianxuan/harness/ProviderClient.kt": 1823,
         "harness/src/main/java/top/wkbin/tianxuan/harness/ResponsesApi.kt": 495,
-        "harness/src/main/java/top/wkbin/tianxuan/harness/SubagentOrchestrator.kt": 886,
+        "harness/src/main/java/top/wkbin/tianxuan/harness/SubagentOrchestrator.kt": 937,
         "harness/src/main/java/top/wkbin/tianxuan/harness/ToolExecutor.kt": 1903,
         "harness/src/main/java/top/wkbin/tianxuan/harness/compaction/CompactionSummarizer.kt": 406,
         "harness/src/main/java/top/wkbin/tianxuan/harness/dual/DualAgentCoordinator.kt": 450,
