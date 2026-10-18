@@ -78,9 +78,9 @@ class SessionProjectionRegistry(
     /** 每个会话的投影状态缓存。 */
     private class SessionProjections {
         /** 各单元的状态，key = 投影键的规范名。 */
-        val states = mutableMapOf<String, Any>()
-        /** 各单元的变更监听器。 */
-        val listeners = mutableMapOf<String, MutableList<ProjectionChangeListener>>()
+        val states = java.util.concurrent.ConcurrentHashMap<String, Any>()
+        /** 各单元的变更监听器；CopyOnWriteArrayList 支持读多写少的并发遍历。 */
+        val listeners = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.CopyOnWriteArrayList<ProjectionChangeListener>>()
         /** 最后处理的会话事件 seq（--1 = 尚未处理）。 */
         var watermarkSeq: Long = -1
     }
@@ -105,7 +105,7 @@ class SessionProjectionRegistry(
      * @param events 按序提交的会话事件
      */
     fun drive(sessionId: String, header: ProjectionSessionMeta, events: List<HarnessMessage>) {
-        val projections = sessions.getOrPut(sessionId) { SessionProjections() }
+        val projections = sessions.computeIfAbsent(sessionId) { SessionProjections() }
 
         for ((key, definition) in definitions) {
             val untypedDef = definition as ProjectionDefinition<Any, Any>
@@ -160,8 +160,8 @@ class SessionProjectionRegistry(
      * @return 取消订阅函数
      */
     fun onChange(sessionId: String, key: Any, listener: ProjectionChangeListener): () -> Unit {
-        val projections = sessions.getOrPut(sessionId) { SessionProjections() }
-        val listeners = projections.listeners.getOrPut(key.toString()) { mutableListOf() }
+        val projections = sessions.computeIfAbsent(sessionId) { SessionProjections() }
+        val listeners = projections.listeners.computeIfAbsent(key.toString()) { java.util.concurrent.CopyOnWriteArrayList() }
         listeners.add(listener)
         return { listeners.remove(listener) }
     }
