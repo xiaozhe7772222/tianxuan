@@ -144,7 +144,8 @@ class TerminalSanitizer(
 
     private fun enforcePendingBound() {
         if (pending.toByteArray(Charsets.UTF_8).size <= maxPendingBytes) return
-        discardMode = if (pending.isNotEmpty() && pending[1] == ']') DiscardMode.OSC else DiscardMode.CSI
+        // pending 可能只有 1 个字符（如 "\u001b"），此时 pending[1] 会越界
+        discardMode = if (pending.length > 1 && pending[1] == ']') DiscardMode.OSC else DiscardMode.CSI
         pending = ""
     }
 

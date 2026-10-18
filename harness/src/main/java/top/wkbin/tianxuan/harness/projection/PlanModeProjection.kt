@@ -52,14 +52,20 @@ object PlanModeProjection : ProjectionDefinition<String, PlanModeProjection.Plan
                         wantsPlan -> true
                         else -> state.active // 更新/查看类操作不改模式
                     }
-                    state.copy(active = newActive, wanted = newActive, lastPlanCallIndex = state.lastPlanCallIndex)
+                    // wanted 记录"切换目标"，active 保持旧值直到下一个 UserMessage 才生效。
+                    // 同时更新两者会导致 pending 永远为 false（wanted == active 恒成立）。
+                    state.copy(wanted = newActive, lastPlanCallIndex = state.lastPlanCallIndex)
                 } else {
                     state
                 }
             }
             is UserMessage -> {
-                // 新的用户轮到来，进行中的切换已生效
-                state.copy(wanted = null)
+                // 新的用户轮到来，进行中的切换已生效：active 采纳 wanted，wanted 清空
+                state.copy(
+                    active = state.wanted ?: state.active,
+                    wanted = null,
+                    lastUserMessageIndex = state.lastUserMessageIndex,
+                )
             }
             else -> state
         }
