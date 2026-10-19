@@ -28,7 +28,12 @@ object TextChunker {
                 }
                 var i = 0
                 while (i < trimmed.length) {
-                    val end = (i + maxChars).coerceAtMost(trimmed.length)
+                    var end = (i + maxChars).coerceAtMost(trimmed.length)
+                    // 避免切断 UTF-16 代理对（emoji 等 4 字节字符）：
+                    // end 落在代理对中间时回退一个 code unit；end > i + 1 保证至少前进一格防死循环。
+                    if (end > i + 1 && end < trimmed.length && trimmed[end - 1].isHighSurrogate()) {
+                        end -= 1
+                    }
                     chunks += trimmed.substring(i, end).trim()
                     i = end
                 }

@@ -53,9 +53,10 @@ class EmbeddingClient(
             put("input", buildJsonArray { texts.forEach { add(JsonPrimitive(it)) } })
         }.toString().toRequestBody(JSON_MEDIA_TYPE)
 
-        val endpoint = baseUrl.trimEnd('/') + endpointSuffix.trimStart('/').let {
-            if (it.endsWith(endpointSuffix.trimStart('/'))) it else "${baseUrl.trimEnd('/')}${endpointSuffix}"
-        }
+        // 端点拼接：baseUrl 去尾斜杠 + "/" + 后缀去首斜杠。
+        // 旧写法 `baseUrl.trimEnd('/') + endpointSuffix.trimStart('/')` 缺斜杠分隔符，
+        // baseUrl="https://api.com/v1" + suffix="/embeddings" → "…/v1embeddings"（错误）。
+        val endpoint = baseUrl.trimEnd('/') + "/" + endpointSuffix.trimStart('/')
         val request = Request.Builder()
             .url(endpoint)
             .apply { apiKey?.takeIf { it.isNotBlank() }?.let { header("Authorization", "Bearer $it") } }
@@ -66,8 +67,12 @@ class EmbeddingClient(
         val cancelHandle = coroutineContext[Job]?.invokeOnCompletion(onCancelling = true) { call.cancel() }
         try {
             call.execute().use { response ->
+                // 限制响应体积：异常/恶意端点返回超大 body 会 OOM（与 AgentModelConnectionTester 同口径）
+                if (response.body.contentLength() > MAX_RESPONSE_BYTES) {
+                    throw IOException("嵌入接口响应过大（超过 ${MAX_RESPONSE_BYTES / 1024 / 1024}MB），请检查嵌入服务是否正常")
+                }
                 if (!response.isSuccessful) {
-                    val body = response.body.string()
+                    val body = response.peekBody(MAX_ERROR_BODY_BYTES).string()
                     val maskedEndpoint = endpoint.substringBefore('/').take(40)
                     if (response.code == 404) {
                         throw IOException(
@@ -81,7 +86,7 @@ class EmbeddingClient(
                     }
                     throw IOException("嵌入接口错误 HTTP ${response.code}（端点: $maskedEndpoint，模型: $model）：${body.take(500)}")
                 }
-                val body = response.body.string()
+                val body = response.peekBody(MAX_RESPONSE_BYTES).string()
                 val parsed = runCatching { json.decodeFromString(EmbeddingResponse.serializer(), body) }
                     .getOrElse { parseEmbeddingsManually(body) }
                 parsed.data.map { item -> FloatArray(item.embedding.size) { idx -> item.embedding[idx] } }
@@ -117,5 +122,9 @@ class EmbeddingClient(
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
         const val DEFAULT_MODEL = "text-embedding-3-small"
         const val DEFAULT_ENDPOINT_SUFFIX = "/embeddings"
+        /** 嵌入响应上限：批量嵌入大文本时响应可能较大，但 16MB 足够覆盖万级 chunk。 */
+        private const val MAX_RESPONSE_BYTES = 16L * 1024 * 1024
+        /** 错误响应预览上限。 */
+        private const val MAX_ERROR_BODY_BYTES = 1L * 1024 * 1024
     }
 }

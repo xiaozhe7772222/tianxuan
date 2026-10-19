@@ -2,6 +2,7 @@ package top.wkbin.tianxuan.ui.knowledge
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -64,6 +65,8 @@ class KnowledgeViewModel(
             _error.value = null
             try {
                 knowledgeManager.addDocument(name, content)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
@@ -76,6 +79,8 @@ class KnowledgeViewModel(
         viewModelScope.launch {
             try {
                 knowledgeManager.removeDocument(docId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message
             }
@@ -87,6 +92,8 @@ class KnowledgeViewModel(
             _reEmbedding.value = docId
             try {
                 knowledgeManager.reEmbed(docId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
@@ -105,6 +112,8 @@ class KnowledgeViewModel(
             _searching.value = true
             try {
                 _searchResults.value = knowledgeManager.search(query, topK = 5)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message
                 _searchResults.value = emptyList()

@@ -1658,6 +1658,8 @@ class ToolExecutor(
                 val text = hits.joinToString("\n\n") { "【${it.docName} · 相似度 ${"%.2f".format(it.score)}】\n${it.text}" }
                 true to text
             }
+        } catch (e: CancellationException) {
+            throw e // 取消必须透传
         } catch (e: Exception) {
             false to "知识库检索失败：${e.message ?: e::class.simpleName}"
         }
@@ -1673,6 +1675,8 @@ class ToolExecutor(
             val docId = km.addDocument(name, content, source = "agent")
             val doc = km.documents.first().firstOrNull { it.id == docId }
             true to "知识库文档「$name」已写入（ID: $docId，分块 ${doc?.chunkCount ?: 0}，状态 ${doc?.status ?: "embedding"}）。"
+        } catch (e: CancellationException) {
+            throw e // 取消必须透传
         } catch (e: Exception) {
             false to "知识库写入失败：${e.message ?: e::class.simpleName}"
         }
@@ -1690,6 +1694,8 @@ class ToolExecutor(
                 }
                 true to "知识库共 ${docs.size} 个文档：\n$text"
             }
+        } catch (e: CancellationException) {
+            throw e // 取消必须透传
         } catch (e: Exception) {
             false to "知识库读取失败：${e.message ?: e::class.simpleName}"
         }

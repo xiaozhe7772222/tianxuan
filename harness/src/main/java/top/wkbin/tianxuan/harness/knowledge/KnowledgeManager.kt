@@ -81,6 +81,8 @@ class KnowledgeManager(
                     System.currentTimeMillis(),
                 )
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e // 取消必须透传，不能被当成嵌入失败吞掉
         } catch (e: Exception) {
             repository.updateDocumentStatus(docId, "error", 0, e.message, System.currentTimeMillis())
         }
@@ -112,6 +114,8 @@ class KnowledgeManager(
                 if (embeddedCount < chunks.size) "${chunks.size - embeddedCount} 块嵌入失败" else null,
                 System.currentTimeMillis(),
             )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e // 取消必须透传
         } catch (e: Exception) {
             repository.updateDocumentStatus(docId, "error", chunks.size, e.message, System.currentTimeMillis())
         }
@@ -128,6 +132,8 @@ class KnowledgeManager(
         val cfg = providerConfig()
         val queryVector = try {
             embeddingClient.embed(listOf(query), cfg.baseUrl, cfg.apiKey, cfg.model, cfg.endpointSuffix).firstOrNull()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e // 取消必须透传，不能降级为 BM25 掩盖取消
         } catch (e: Exception) {
             null // 嵌入失败 → BM25 降级（不阻断检索）
         }
