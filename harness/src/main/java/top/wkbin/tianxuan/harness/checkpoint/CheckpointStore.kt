@@ -194,7 +194,7 @@ class CheckpointStore() {
 
     /** 首次访问时从磁盘恢复该会话的已关闭轮；后续访问直接用内存态。 */
     private fun stateOf(sessionId: String): SessionState {
-        val state = sessions.getOrPut(sessionId) { SessionState() }
+        val state = sessions.computeIfAbsent(sessionId) { SessionState() }
         val disk = persistence
         if (disk != null && restoredSessions.add(sessionId)) {
             runCatching {

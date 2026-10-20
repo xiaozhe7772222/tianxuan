@@ -21,8 +21,10 @@ internal class ApiKeyScheduler(
         var cooldownUntil: Long = 0L,
     )
 
-    private val states = mutableMapOf<String, KeyState>()
-    private val cursors = mutableMapOf<String, Int>()
+    // ConcurrentHashMap + computeIfAbsent：getOrPut 是 get-then-put 非原子，
+    // 并发首次访问同一 key 会各建一个 KeyState 并互相覆盖（请求计数丢失）。
+    private val states = java.util.concurrent.ConcurrentHashMap<String, KeyState>()
+    private val cursors = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
     @Synchronized
     fun select(keys: List<String>, rpmLimit: Int, excluded: Set<String> = emptySet()): Selection {
@@ -38,7 +40,7 @@ internal class ApiKeyScheduler(
             val index = (start + offset) % normalized.size
             val key = normalized[index]
             if (key in excluded) return@repeat
-            val state = states.getOrPut(fingerprint(key)) { KeyState() }
+            val state = states.computeIfAbsent(fingerprint(key)) { KeyState() }
             if (state.cooldownUntil > now) {
                 shortestWait = minOf(shortestWait, state.cooldownUntil - now)
                 return@repeat
@@ -59,7 +61,7 @@ internal class ApiKeyScheduler(
     fun markRateLimited(key: String, retryAfterSeconds: Long?) {
         val retryMillis = (retryAfterSeconds ?: DEFAULT_COOLDOWN_SECONDS)
             .coerceIn(1L, MAX_COOLDOWN_SECONDS) * 1_000L
-        val state = states.getOrPut(fingerprint(key)) { KeyState() }
+        val state = states.computeIfAbsent(fingerprint(key)) { KeyState() }
         state.cooldownUntil = maxOf(state.cooldownUntil, nowMillis() + retryMillis)
     }
 

@@ -86,7 +86,7 @@ class SessionStateMirrors(
     }
 
     private fun errorFlowOf(sessionId: String): MutableStateFlow<String?> =
-        sessionErrors.getOrPut(sessionId) { MutableStateFlow(null) }
+        sessionErrors.computeIfAbsent(sessionId) { MutableStateFlow(null) }
 
     fun errorOf(sessionId: String): String? = sessionErrors[sessionId]?.value
 
@@ -148,7 +148,7 @@ class SessionStateMirrors(
     }
 
     private fun thinkingLiveFlowOf(sessionId: String): MutableStateFlow<Boolean> =
-        sessionThinkingLives.getOrPut(sessionId) { MutableStateFlow(false) }
+        sessionThinkingLives.computeIfAbsent(sessionId) { MutableStateFlow(false) }
 
     /** 从历史消息推断该会话是否启用过推理输出（loadSession 时恢复）。 */
     fun recordThinkingModeFromHistory(sessionId: String, history: List<HarnessMessage>) {

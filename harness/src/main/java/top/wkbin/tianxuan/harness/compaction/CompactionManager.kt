@@ -262,9 +262,12 @@ class CompactionManager(
                 estimatedTokensBefore = fresh.messages.sumOf(::messageTokens),
                 createdAt = now,
                 sourceWatermarkSequence = fresh.sourceMaxSequence,
+                // SurfaceOp.Replace 用 sourceWatermarkSequence 作为真实序列边界：
+                // startSeq=0 表示从分支开头替换，endSeq=sourceWatermarkSequence 表示替换到水位线。
+                // 不再用 id.hashCode()（可能碰撞且与真实 sequence 无关）。
                 surfaceOp = SurfaceOp.Replace(
-                    startSeq = collapsed.firstOrNull()?.id?.hashCode()?.toLong() ?: 0L,
-                    endSeq = collapsed.lastOrNull()?.id?.hashCode()?.toLong() ?: 0L,
+                    startSeq = 0L,
+                    endSeq = fresh.sourceMaxSequence,
                 ),
                 turnEndReason = turnEndReason,
             )

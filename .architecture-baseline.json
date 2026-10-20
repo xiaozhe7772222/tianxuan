@@ -140,6 +140,6 @@
         "runtime/src/main/java/top/wkbin/tianxuan/runtime/pty/PromptMarker.kt": 34,
         "runtime/src/main/java/top/wkbin/tianxuan/runtime/pty/PtyReadinessTracker.kt": 185,
         "runtime/src/main/java/top/wkbin/tianxuan/runtime/pty/TerminalSanitizer.kt": 195,
-        "harness/src/main/java/top/wkbin/tianxuan/harness/compaction/CompactionManager.kt": 407
+        "harness/src/main/java/top/wkbin/tianxuan/harness/compaction/CompactionManager.kt": 410
     }
 }
