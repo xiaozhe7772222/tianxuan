@@ -84,6 +84,8 @@ object CustomIterationBootstrap {
                 workspacePath = workspaceDir.absolutePath,
                 prompt = BOOTSTRAP_PROMPT
             )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e // 取消必须透传
         } catch (e: Exception) {
             return BootstrapResult(
                 success = false,
