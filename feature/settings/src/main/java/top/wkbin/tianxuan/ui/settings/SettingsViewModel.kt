@@ -957,6 +957,8 @@ class SettingsViewModel(
                 } ?: error("无法读取所选 ZIP 文件")
                 val inspection = installer.inspectZipBytes(bos.toByteArray(), fallbackId = "custom_zip")
                 _pendingSkillInspection.value = inspection
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Throwable) {
                 _skillArchiveMessage.value = "解析或审计技能包失败: ${e.message}"
                 _skillArchiveMessageIsError.value = true
@@ -976,6 +978,8 @@ class SettingsViewModel(
                 _skillArchiveMessageIsError.value = false
                 _pendingSkillInspection.value = null
                 loadClawHubMarket()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Throwable) {
                 _skillArchiveMessage.value = "安装失败: ${e.message}"
                 _skillArchiveMessageIsError.value = true

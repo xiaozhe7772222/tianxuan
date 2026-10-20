@@ -496,6 +496,8 @@ EOF
                 if (running) {
                     fetchDaemonData()
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Failed to start cc-switch daemon: ${e.message}", e)
                 withContext(Dispatchers.Main.immediate) {
@@ -524,6 +526,8 @@ EOF
                         _errorMessage.value = "守护进程未能停止，端口可能仍被占用"
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Failed to stop cc-switch daemon: ${e.message}", e)
                 withContext(Dispatchers.Main.immediate) {
@@ -555,6 +559,8 @@ EOF
                 if (running) {
                     fetchDaemonData()
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Failed to restart cc-switch daemon: ${e.message}", e)
                 withContext(Dispatchers.Main.immediate) {
@@ -988,6 +994,8 @@ EOF
 
                 delay(500)
                 fetchDaemonData()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Install agent failed: ${e.message}", e)
                 log("[-] 安装过程发生异常: ${e.message}")
