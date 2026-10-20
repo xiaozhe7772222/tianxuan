@@ -146,6 +146,7 @@ class WorkspaceViewModel(
     fun refreshInstalledStatus() {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try { _installedComponentIds.value = toolManager.probeInstalledComponents() }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
             catch (e: Exception) { android.util.Log.w("WorkspaceViewModel", "probeInstalledComponents failed", e) }
         }
     }
@@ -200,6 +201,8 @@ class WorkspaceViewModel(
                 refreshInstalledStatus()
                 notify(context.getString(R.string.workspace_suite_installed))
                 _activeBundleForSetup.value = null
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 notify(context.getString(R.string.workspace_deploy_failed, e.message.orEmpty()), isError = true)
             } finally {

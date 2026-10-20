@@ -145,6 +145,8 @@ class HomeViewModel(
         viewModelScope.launch {
             try {
                 privilegeManager.getPrivilegeInfo()
+            } catch (e: CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("HomeViewModel: Failed to refresh privilege status: ${e.message}", e)
             }
@@ -217,7 +219,7 @@ class HomeViewModel(
         metricsRefreshJob = viewModelScope.launch(Dispatchers.IO) {
             try {
                 // 快速指标：每次刷新（进程数、运行时间）
-                val bgProcesses = try { linuxRuntime.listBackground() } catch (e: Exception) { emptyList() }
+                val bgProcesses = try { linuxRuntime.listBackground() } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
                 val activeProcs = bgProcesses.size + backgroundTaskRegistry.activeTasks.value.size
 
                 // 4. 运行时间 (基于全局应用启动时间戳，切换 Tab 不会重置)
@@ -250,7 +252,7 @@ class HomeViewModel(
                     heapUsedMb = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024)
 
                     // 2. 存储空间 (Disk / Rootfs)
-                    val rootfsDir = try { linuxRuntime.rootfsPath() } catch (e: Exception) { context.filesDir }
+                    val rootfsDir = try { linuxRuntime.rootfsPath() } catch (e: CancellationException) { throw e } catch (e: Exception) { context.filesDir }
                     val stat = StatFs(if (rootfsDir.exists()) rootfsDir.absolutePath else context.filesDir.absolutePath)
                     val totalBytes = stat.totalBytes
                     val availBytes = stat.availableBytes
@@ -303,6 +305,8 @@ class HomeViewModel(
                 linuxRuntime.switchActiveDistro(distroId)
                 // 3. 刷新仪表盘数据
                 refreshMetrics()
+            } catch (e: CancellationException) {
+                throw e // 取消必须透传，不能显示为 "切换失败"
             } catch (e: Exception) {
                 logger.w("HomeViewModel: Failed to switch distro: ${e.message}", e)
             } finally {

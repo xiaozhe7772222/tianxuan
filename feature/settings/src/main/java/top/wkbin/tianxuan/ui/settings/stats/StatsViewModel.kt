@@ -62,6 +62,8 @@ class StatsViewModel(
                 )
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 android.util.Log.e("StatsViewModel", "Failed to build stats snapshot: ${e.message}", e)
                 _uiState.value = _uiState.value.copy(

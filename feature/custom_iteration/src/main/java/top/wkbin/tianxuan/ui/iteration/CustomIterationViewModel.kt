@@ -51,6 +51,8 @@ class CustomIterationViewModel(
                         errorMessage = app.getString(R.string.iteration_error_bootstrap)
                     )
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传，不能显示为 "bootstrap failed"
             } catch (e: Exception) {
                 Log.e(TAG, "bootstrap custom iteration crashed", e)
                 _uiState.value = _uiState.value.copy(

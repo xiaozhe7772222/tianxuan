@@ -270,6 +270,8 @@ class OnboardingViewModel(
                         _pluginInstallProgress.value = event.message
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 // 忽略异常保证流程顺畅
             } finally {
@@ -345,6 +347,8 @@ class OnboardingViewModel(
                 finish()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 // 写入失败时留在引导页并提示，不再静默标记 onboarding 完成
                 _importError.value = "模型配置保存失败：${e.message ?: e::class.simpleName}"

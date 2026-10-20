@@ -264,6 +264,8 @@ class ChatViewModel(
                 } else {
                     context.getString(R.string.chat_skill_suggestion_created, skill.name)
                 }
+            } catch (t: kotlinx.coroutines.CancellationException) {
+                throw t // 取消必须透传
             } catch (t: Throwable) {
                 Log.w(TAG, "applySkillSuggestion failed", t)
                 _notice.value = context.getString(

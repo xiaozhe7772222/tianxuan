@@ -190,6 +190,8 @@ class ToolDetailViewModel(
                 // startGateway 内部会等待服务端口就绪后才返回，避免"假运行中"
                 toolManager.startGateway(currentId)
                 _gatewayRunning.value = toolManager.isGatewayRunning(currentId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Failed to start gateway for $currentId: ${e.message}", e)
                 _error.value = "网关启动失败：${e.message}"
@@ -209,6 +211,10 @@ class ToolDetailViewModel(
                 toolManager.stopGateway(currentId)
                 delay(500)
                 _gatewayRunning.value = toolManager.isGatewayRunning(currentId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Failed to stop gateway for $currentId: ${e.message}", e)
                 _error.value = "网关停止失败：${e.message}"
@@ -224,6 +230,8 @@ class ToolDetailViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 toolSettingsRepository.setAutoStart(linuxRuntime.activeDistroId.value, currentId, enabled)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Failed to set auto-start for $currentId: ${e.message}", e)
                 // 保存失败必须上抛 UI，避免 Switch 显示“假成功”
@@ -252,6 +260,8 @@ class ToolDetailViewModel(
                         _gatewayOperating.value = false
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Failed to generate token for $currentId: ${e.message}", e)
                 _error.value = "重新生成 Token 失败：${e.message}"
@@ -265,6 +275,8 @@ class ToolDetailViewModel(
         viewModelScope.launch {
             try {
                 settingsDataStore.setToolAccessToken(linuxRuntime.activeDistroId.value, currentId, null)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Failed to clear token for $currentId: ${e.message}", e)
             }
@@ -297,6 +309,8 @@ class ToolDetailViewModel(
                     toolManager.restartGateway(currentId)
                     _gatewayRunning.value = toolManager.isGatewayRunning(currentId)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Failed to apply model ${model.name} for $currentId: ${e.message}", e)
                 _error.value = "应用模型失败：${e.message}"
@@ -323,6 +337,8 @@ class ToolDetailViewModel(
         viewModelScope.launch {
             try {
                 toolManager.verify(currentId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Tool verification failed: $currentId, ${e.message}", e)
                 _error.value = "自检失败：${e.message}"
@@ -336,6 +352,8 @@ class ToolDetailViewModel(
         viewModelScope.launch {
             try {
                 toolManager.uninstall(currentId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Tool uninstall failed: $currentId, ${e.message}", e)
                 _error.value = "卸载失败：${e.message}"

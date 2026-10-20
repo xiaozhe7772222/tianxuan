@@ -73,6 +73,8 @@ class ToolCenterViewModel(
             _isSyncing.value = true
             try {
                 toolManager.syncRegistry()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Failed to sync tool registry: ${e.message}", e)
                 _operationError.value = "刷新插件目录失败，请检查网络后重试"
@@ -121,6 +123,8 @@ class ToolCenterViewModel(
         viewModelScope.launch {
             try {
                 toolManager.uninstall(toolId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Tool uninstall failed: $toolId, ${e.message}", e)
                 _operationError.value = "卸载「$toolId」失败，请稍后重试；可查看日志了解详情"
@@ -133,6 +137,8 @@ class ToolCenterViewModel(
         viewModelScope.launch {
             val logs = try {
                 toolManager.observeInstallLogs(toolId).first().map { "[${it.event}] ${it.message}" }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Failed to read tool logs for $toolId: ${e.message}", e)
                 emptyList()
@@ -145,6 +151,8 @@ class ToolCenterViewModel(
         viewModelScope.launch {
             try {
                 toolManager.verify(toolId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Tool verification failed: $toolId, ${e.message}", e)
             }
@@ -156,6 +164,8 @@ class ToolCenterViewModel(
             try {
                 toolManager.clearLogs(toolId)
                 _toolLogs.value = emptyList()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Failed to clear logs for $toolId: ${e.message}", e)
             }
@@ -204,6 +214,8 @@ class ToolCenterViewModel(
             try {
                 val installed = toolManager.probeInstalledComponents()
                 _installedComponentIds.value = installed
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消必须透传
             } catch (e: Exception) {
                 logger.w("Failed to probe installed components: ${e.message}", e)
             }
