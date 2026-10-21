@@ -99,7 +99,7 @@ class McpOAuthCoordinator(
             )
             throw failure
         }
-        val lock = locks.getOrPut(transaction.serverId) { Mutex() }
+        val lock = locks.computeIfAbsent(transaction.serverId) { Mutex() }
         lock.withLock {
             credentials.saveCredential(
                 McpOAuthCredential(
@@ -126,7 +126,7 @@ class McpOAuthCoordinator(
         now: Long = System.currentTimeMillis(),
         force: Boolean = false,
     ): String? {
-        val lock = locks.getOrPut(serverId) { Mutex() }
+        val lock = locks.computeIfAbsent(serverId) { Mutex() }
         return lock.withLock {
             val current = credentials.credential(serverId) ?: return@withLock null
             val expiresAt = current.expiresAt

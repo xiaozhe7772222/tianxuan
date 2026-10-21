@@ -117,7 +117,7 @@ class BranchSummarizer(
 
     /** 同一 fromLeafId 只摘要一次（进程内去重，防来回切换重复注入）。 */
     private fun markSummarized(sessionId: String, fromLeafId: String): Boolean =
-        summarizedFromLeafs.getOrPut(sessionId) { ConcurrentHashMap.newKeySet() }.add(fromLeafId)
+        summarizedFromLeafs.computeIfAbsent(sessionId) { ConcurrentHashMap.newKeySet() }.add(fromLeafId)
 
     private companion object {
         const val MIN_MESSAGES = 4
